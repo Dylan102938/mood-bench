@@ -1,0 +1,31 @@
+[project]
+name = "mood-bench"
+version = "1.0.0"
+description = "Todo"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "jinja2>=3.1.0",
+    "datasets>=4.0.0",
+    "rich>=14.0.0",
+    "scikit-learn>=1.7.1",
+    "matplotlib>=3.8.0",
+    "transformers>=4.55.4",
+    "peft>=0.13.0",
+    "einops>=0.8.1",
+    "wandb>=0.21.3",
+    "torch>=2.11.0",
+]
+
+[dependency-groups]
+dev = [
+    "pytest",
+    "ruff",
+    "mypy",
+]
+
+[tool.uv]
+default-groups = "all"
+
+[tool.mypy]
+disable_error_code = ["import-untyped"]
