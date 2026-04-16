@@ -4,7 +4,7 @@ import numpy as np
 import torch as t
 from transformers import BatchEncoding, PreTrainedModel, PreTrainedTokenizerBase
 
-from mood_bench.pipeline.base import Pipeline
+from mood_bench.pipeline.base import Pipeline, PipelineResult
 from mood_bench.tokenize import rendered
 
 
@@ -19,7 +19,7 @@ class PerplexityPipeline(Pipeline):
         self.tokenizer = tokenizer
         self.outlier_z_threshold = outlier_z_threshold
 
-    def __call__(self, samples: list[str], **kwargs: Any) -> tuple[np.ndarray, dict[str, Any]]:
+    def __call__(self, samples: list[str], **kwargs: Any) -> PipelineResult:
         perplexities_list: list[np.ndarray] = []
         outliers_list: list[list[dict[str, Any]]] = []
         batch_size = kwargs.get("batch_size", 1)
@@ -41,7 +41,7 @@ class PerplexityPipeline(Pipeline):
         perplexities = np.concatenate(perplexities_list)
         meta = {"high_perplexity": outliers_list}
 
-        return -perplexities, meta
+        return perplexities, meta
 
     def _batch_inference(
         self, enc: BatchEncoding, samples: list[str]
@@ -106,16 +106,20 @@ class PerplexityPipeline(Pipeline):
         if len(valid_excess) < 2:
             return []
 
+        mu = valid_excess.mean()
+        sigma = max(valid_excess.std(), 1e-9)
+        z_scores = (valid_excess - mu) / sigma
+
         seq_outliers: list[dict[str, Any]] = []
-        for i, (nll, excess) in enumerate(zip(valid_nll, valid_excess, strict=True)):
-            if self.outlier_z_threshold is None or excess > self.outlier_z_threshold:
+        for i, (nll, z) in enumerate(zip(valid_nll, z_scores, strict=True)):
+            if self.outlier_z_threshold is None or z > self.outlier_z_threshold:
                 start, end = offset_mapping[valid_idx[i]]
                 seq_outliers.append(
                     {
                         "char": int(start),
                         "token": sample[start:end],
                         "nll": float(nll),
-                        "z_score": float(excess),
+                        "z_score": float(z),
                     }
                 )
 

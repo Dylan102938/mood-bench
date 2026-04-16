@@ -4,16 +4,22 @@ import numpy as np
 import torch as t
 from transformers import BatchEncoding, PreTrainedModel, PreTrainedTokenizerBase
 
-from mood_bench.pipeline.base import Pipeline
+from mood_bench.pipeline.base import Pipeline, PipelineResult
 from mood_bench.tokenize import rendered
 
 
 class GuardModelPipeline(Pipeline):
-    def __init__(self, model: PreTrainedModel, tokenizer: PreTrainedTokenizerBase) -> None:
+    def __init__(
+        self,
+        model: PreTrainedModel,
+        tokenizer: PreTrainedTokenizerBase,
+        unsafe_label_index: int = 1,
+    ) -> None:
         self.model = model
         self.tokenizer = tokenizer
+        self.unsafe_label_index = unsafe_label_index
 
-    def __call__(self, samples: list[str], **kwargs: Any) -> tuple[np.ndarray, dict[str, Any]]:
+    def __call__(self, samples: list[str], **kwargs: Any) -> PipelineResult:
         scores_list: list[np.ndarray] = []
         batch_size = kwargs.get("batch_size", 1)
         for batch in rendered(
@@ -39,6 +45,6 @@ class GuardModelPipeline(Pipeline):
 
         logits = outputs.logits.detach().float().cpu()
         if logits.shape[-1] > 1:
-            return t.softmax(logits, dim=-1)[:, -1].numpy()
+            return t.softmax(logits, dim=-1)[:, self.unsafe_label_index].numpy()
         else:
             return logits.squeeze(-1).numpy()

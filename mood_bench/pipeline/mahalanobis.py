@@ -5,7 +5,7 @@ import torch as t
 from transformers import BatchEncoding, PreTrainedModel, PreTrainedTokenizerBase
 
 from mood_bench.data import load_mood_dataset
-from mood_bench.pipeline.base import Pipeline
+from mood_bench.pipeline.base import Pipeline, PipelineResult
 from mood_bench.tokenize import rendered
 
 PoolingStrategy = Literal["cls", "mean", "max"]
@@ -43,7 +43,7 @@ def get_stats_for_model(
 ) -> dict[str, t.Tensor]:
     ds = load_mood_dataset(split="train")
 
-    safe_ds = ds.filter(lambda x: x["safe"] == 1)
+    safe_ds = ds.filter(lambda x: x["unsafe"] == 0)
     if max_samples is not None and safe_ds.num_rows > max_samples:
         safe_ds = safe_ds.shuffle().select(range(max_samples))
 
@@ -111,10 +111,7 @@ class MahalanobisPipeline(Pipeline):
         self.mean = mean
         self.inv_cov = inv_cov
 
-    def calculate_anomaly_scores(self, logits: t.Tensor, dists: t.Tensor) -> t.Tensor:
-        return -1 * dists
-
-    def __call__(self, samples: list[str], **kwargs: Any) -> tuple[np.ndarray, dict[str, Any]]:
+    def __call__(self, samples: list[str], **kwargs: Any) -> PipelineResult:
         batch_size = kwargs.get("batch_size", 16)
         anomaly_scores_list: list[np.ndarray] = []
         for batch in rendered(
@@ -133,9 +130,7 @@ class MahalanobisPipeline(Pipeline):
             dists_squared = t.sum((centered @ self.inv_cov) * centered, dim=1)
             dists = t.sqrt(t.clamp(dists_squared, min=0))
 
-            anomaly_scores_list.append(
-                self.calculate_anomaly_scores(logits, dists).detach().cpu().numpy()
-            )
+            anomaly_scores_list.append(dists.detach().cpu().numpy())
 
         anomaly_scores = np.concatenate(anomaly_scores_list)
         return anomaly_scores, {}

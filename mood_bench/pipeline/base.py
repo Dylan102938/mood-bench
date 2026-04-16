@@ -1,12 +1,15 @@
 from __future__ import annotations
 
-from typing import Any, Protocol
+from typing import Any, Protocol, TypeAlias
 
 import numpy as np
 
+PipelineResult: TypeAlias = tuple[np.ndarray, dict[str, Any]]
+"""Return type of :class:`Pipeline`: per-input ``scores`` and run ``metadata``."""
+
 
 class Pipeline(Protocol):
-    def __call__(self, samples: list[str], **kwargs: Any) -> tuple[np.ndarray, dict[str, Any]]:
+    def __call__(self, samples: list[str], **kwargs: Any) -> PipelineResult:
         """
         Process samples and return scores for each sample.
 
