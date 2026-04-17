@@ -29,3 +29,10 @@ default-groups = "all"
 
 [tool.mypy]
 disable_error_code = ["import-untyped"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+markers = [
+    "real_model: tests that load real HF weights; skipped unless --real-models is passed",
+]

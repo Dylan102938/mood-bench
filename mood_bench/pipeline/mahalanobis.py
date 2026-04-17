@@ -123,8 +123,7 @@ class MahalanobisPipeline(Pipeline):
             truncation=True,
             return_tensors="pt",
         ):
-            features, logits = self._batch_inference(batch)
-            features = features.to(t.float64)
+            features = self._batch_inference(batch).to(t.float64)
 
             centered = features - self.mean
             dists_squared = t.sum((centered @ self.inv_cov) * centered, dim=1)
@@ -135,7 +134,7 @@ class MahalanobisPipeline(Pipeline):
         anomaly_scores = np.concatenate(anomaly_scores_list)
         return anomaly_scores, {}
 
-    def _batch_inference(self, enc: BatchEncoding) -> tuple[t.Tensor, t.Tensor]:
+    def _batch_inference(self, enc: BatchEncoding) -> t.Tensor:
         input_ids = cast(t.Tensor, enc["input_ids"])
         attention_mask = cast(t.Tensor, enc["attention_mask"])
 
@@ -147,10 +146,8 @@ class MahalanobisPipeline(Pipeline):
             )
 
             last_hidden_state = outputs.hidden_states[-1]
-            pooled_features = (
+            return (
                 _pool_hidden_states(last_hidden_state, attention_mask, self.pooling_strategy)
                 .contiguous()
                 .clone()
             )
-
-            return pooled_features, outputs.logits
