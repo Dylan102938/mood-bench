@@ -56,10 +56,10 @@ def _binary_signal(
 
 
 def test_lambda_aggregate_recovers_zero_when_aux_is_anti_correlated() -> None:
-    anchor, unsafe = _binary_signal(1000, unsafe_shift=-2.0, noise=1.0, seed=0)
+    anchor, unsafe = _binary_signal(1000, unsafe_shift=2.0, noise=1.0, seed=0)
     rng = np.random.default_rng(1)
-    # Aux flips the direction: unsafe shifted positively, swamping the anchor signal.
-    aux = np.where(unsafe, 20.0, 0.0) + rng.normal(0.0, 1.0, unsafe.size)
+    # Aux flips the direction: unsafe shifted negatively, swamping the anchor signal.
+    aux = np.where(unsafe, -20.0, 0.0) + rng.normal(0.0, 1.0, unsafe.size)
     id_labels = np.ones(unsafe.size, dtype=bool)
 
     _, meta = lambda_aggregate(
@@ -73,7 +73,7 @@ def test_lambda_aggregate_recovers_zero_when_aux_is_anti_correlated() -> None:
 
 
 def test_lambda_aggregate_recovers_grid_max_when_aux_equals_anchor() -> None:
-    anchor, unsafe = _binary_signal(1000, unsafe_shift=-2.0, noise=1.0, seed=2)
+    anchor, unsafe = _binary_signal(1000, unsafe_shift=2.0, noise=1.0, seed=2)
     ds = Dataset.from_dict(
         {
             "in_distribution": [True] * unsafe.size,
@@ -101,8 +101,8 @@ def test_lambda_aggregate_recovers_interior_coefficient_for_weakly_aligned_aux(
     unsafe = np.zeros(n, dtype=bool)
     unsafe[: n // 2] = True
     rng.shuffle(unsafe)
-    anchor = np.where(unsafe, -alpha, 0.0) + rng.normal(0.0, 1.0, n)
-    aux = np.where(unsafe, -beta, 0.0) + rng.normal(0.0, 1.0, n)
+    anchor = np.where(unsafe, alpha, 0.0) + rng.normal(0.0, 1.0, n)
+    aux = np.where(unsafe, beta, 0.0) + rng.normal(0.0, 1.0, n)
     id_labels = np.ones(n, dtype=bool)
 
     _, meta = lambda_aggregate(

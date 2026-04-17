@@ -36,7 +36,6 @@ ALL_EVALS: Set[EvalDataset] = {
     EvalDataset.SCHEMING,
     EvalDataset.JAILBROKEN,
     EvalDataset.SYCOPHANTIC,
-    EvalDataset.SWAHILI,
 }
 
 

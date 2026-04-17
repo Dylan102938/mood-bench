@@ -13,11 +13,13 @@ class GuardModelPipeline(Pipeline):
         self,
         model: PreTrainedModel,
         tokenizer: PreTrainedTokenizerBase,
+        predict_unsafe: bool = True,
         unsafe_label_index: int = 1,
     ) -> None:
         self.model = model
         self.tokenizer = tokenizer
         self.unsafe_label_index = unsafe_label_index
+        self.predict_unsafe = predict_unsafe
 
     def __call__(self, samples: list[str], **kwargs: Any) -> PipelineResult:
         scores_list: list[np.ndarray] = []
@@ -45,6 +47,8 @@ class GuardModelPipeline(Pipeline):
 
         logits = outputs.logits.detach().float().cpu()
         if logits.shape[-1] > 1:
-            return t.softmax(logits, dim=-1)[:, self.unsafe_label_index].numpy()
-        else:
-            return logits.squeeze(-1).numpy()
+            probs = t.softmax(logits, dim=-1)[:, self.unsafe_label_index].numpy()
+            return probs if self.predict_unsafe else 1.0 - probs
+
+        raw = logits.squeeze(-1).numpy()
+        return raw if self.predict_unsafe else -raw
