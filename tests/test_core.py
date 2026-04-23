@@ -14,16 +14,18 @@ from mood_bench.data import EvalDataset
 
 def _make_dataset(n_per_domain: int, domains: Sequence[EvalDataset]) -> Dataset:
     rows: list[dict[str, Any]] = []
+    row_id = 0
     for domain in domains:
         for i in range(n_per_domain):
             rows.append(
                 {
+                    "id": f"id-{row_id}",
                     "conversation": f"{domain.value}-{i}",
                     "domain": domain.value,
-                    "in_distribution": True,
-                    "unsafe": i % 2 == 0,
+                    "malign": i % 2 == 0,
                 }
             )
+            row_id += 1
     return Dataset.from_list(rows)
 
 
@@ -61,7 +63,7 @@ def test_mood_bench_single_pipeline_adds_score_column(
         pipelines=pipeline,
         domains=domains,
         output_dir=str(tmp_path),
-        run_analysis=False,
+        include_figures=False,
     )
 
     assert "score" in out.column_names
@@ -84,7 +86,7 @@ def test_mood_bench_aggregator_combines_results(
         aggregator=min_aggregate,
         domains=domains,
         output_dir=str(tmp_path),
-        run_analysis=False,
+        include_figures=False,
     )
 
     assert np.allclose(np.asarray(out["score"]), 2.0)
@@ -104,7 +106,7 @@ def test_mood_bench_use_mini_truncates_per_domain(
         domains=domains,
         output_dir=str(tmp_path),
         use_mini=True,
-        run_analysis=False,
+        include_figures=False,
     )
 
     assert len(out) <= 100 * len(domains)
@@ -139,13 +141,14 @@ def test_mood_bench_output_dir_name_contains_pipeline_and_aggregator(
             aggregator=min_aggregate,
             domains=domains,
             output_dir=str(tmp_path),
-            run_analysis=False,
+            include_figures=False,
         )
     finally:
         monkeypatch.setattr(Dataset, "to_json", original_to_json, raising=False)
 
     assert "path" in captured
-    parent = captured["path"].parent.name
-    assert "anchorPipe" in parent
-    assert "auxPipe" in parent
-    assert "min_aggregate" in parent
+    # results.jsonl is written directly into the run dir: {run_dir}/results.jsonl.
+    run_dir = captured["path"].parent.name
+    assert "anchorPipe" in run_dir
+    assert "auxPipe" in run_dir
+    assert "min_aggregate" in run_dir
