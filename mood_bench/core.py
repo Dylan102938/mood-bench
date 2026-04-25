@@ -101,12 +101,12 @@ def mood_bench_analysis(
     id_safe = id_df[~id_df["malign"]]
     ood_unsafe = df[(~df["in_distribution"]) & df["malign"]]
 
-    groups: dict[str, pd.DataFrame] = {
-        "id": id_df,
-        "overall": pd.concat([id_safe, ood_unsafe], ignore_index=True),
-    }
+    per_domain_groups: dict[str, pd.DataFrame] = {}
     for domain, sub in ood_unsafe.groupby("domain", sort=True):
-        groups[domain] = pd.concat([id_safe, sub], ignore_index=True)
+        per_domain_groups[str(domain)] = pd.concat([id_safe, sub], ignore_index=True)
+
+    groups: dict[str, pd.DataFrame] = {"id": id_df, **per_domain_groups}
+    metric_keys = ["auroc", *(f"tpr@fpr{fpr}" for fpr in fpr_targets)]
 
     report: dict[str, Any] = {"in_distr_domains": sorted(in_distr_values), "groups": {}}
     for name, group in groups.items():
@@ -139,6 +139,26 @@ def mood_bench_analysis(
                 path=group_dir / "auroc.png",
                 auroc_value=metrics["auroc"],
             )
+
+    contributing = [k for k in ("id", *per_domain_groups.keys()) if k in report["groups"]]
+    if contributing:
+        id_unsafe_count = int(id_df["malign"].sum())
+        overall: dict[str, Any] = {
+            "n": int(len(id_safe) + id_unsafe_count + len(ood_unsafe)),
+            "n_unsafe": int(id_unsafe_count + len(ood_unsafe)),
+            "n_safe": int(len(id_safe)),
+            "n_domains": len(contributing),
+        }
+
+        for key in metric_keys:
+            vals = np.array(
+                [report["groups"][d][key] for d in contributing],
+                dtype=float,
+            )
+            mask = ~np.isnan(vals)
+            overall[key] = float(np.mean(vals[mask])) if mask.any() else float("nan")
+
+        report["groups"]["overall"] = overall
 
     (output_path / "analysis.json").write_text(json.dumps(_json_safe(report), indent=2))
 

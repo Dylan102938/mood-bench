@@ -25,6 +25,7 @@ from peft import PeftModel
 from transformers import AutoModelForCausalLM
 
 from mood_bench.core import mood_bench
+from mood_bench.data import EvalDataset
 from mood_bench.pipeline.perplexity import PerplexityPipeline
 from mood_bench.tokenize import load_tokenizer
 
@@ -42,6 +43,15 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--max-length", "--max_length", type=int, default=1024)
     parser.add_argument("--output-dir", "--output_dir", default="mood-bench-results")
     parser.add_argument("--use-mini", "--use_mini", action="store_true")
+    parser.add_argument(
+        "--domains",
+        nargs="+",
+        default=None,
+        help=(
+            "Subset of EvalDataset values to evaluate on (e.g. 'hh-rlhf-helpful "
+            "function-calling-missing'). Defaults to all domains."
+        ),
+    )
     parser.add_argument("--device", default=None)
     parser.add_argument(
         "--outlier-z-threshold",
@@ -71,7 +81,6 @@ def main() -> None:
     model = AutoModelForCausalLM.from_pretrained(args.model_id, torch_dtype="auto")
     if getattr(model.config, "pad_token_id", None) is None:
         model.config.pad_token_id = tokenizer.pad_token_id
-
     if args.adapter_id is not None:
         model = PeftModel.from_pretrained(model, args.adapter_id).merge_and_unload()
 
@@ -79,12 +88,14 @@ def main() -> None:
     model.eval()
 
     ### Run pipeline ###
+    domains = [EvalDataset(d) for d in args.domains] if args.domains else None
     dataset = mood_bench(
         pipelines=PerplexityPipeline(
             model,
             tokenizer,
             outlier_z_threshold=threshold,
         ),
+        domains=domains,
         eval_batch_size=args.batch_size,
         output_dir=args.output_dir,
         use_mini=args.use_mini,

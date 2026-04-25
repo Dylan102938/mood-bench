@@ -29,10 +29,17 @@ import os
 from pathlib import Path
 
 import torch as t
+from huggingface_hub import hf_hub_download
 from peft import PeftModel
-from transformers import AutoModel
+from safetensors import safe_open
+from transformers import (
+    AutoModel,
+    AutoModelForCausalLM,
+    AutoModelForSequenceClassification,
+)
 
 from mood_bench.core import mood_bench
+from mood_bench.data import EvalDataset
 from mood_bench.pipeline.mahalanobis import (
     MahalanobisPipeline,
     PoolingStrategy,
@@ -41,6 +48,12 @@ from mood_bench.pipeline.mahalanobis import (
 from mood_bench.tokenize import load_tokenizer
 
 POOLING_CHOICES: tuple[PoolingStrategy, ...] = ("cls", "mean", "max")
+MODEL_TYPE_TO_CLS = {
+    "base": AutoModel,
+    "causal": AutoModelForCausalLM,
+    "cls": AutoModelForSequenceClassification,
+}
+MODEL_TYPE_CHOICES: tuple[str, ...] = tuple(MODEL_TYPE_TO_CLS.keys())
 DEFAULT_STATS_CACHE_DIR = Path(
     os.environ.get(
         "MOOD_BENCH_STATS_CACHE", Path.home() / ".cache" / "mood-bench" / "mahalanobis-stats"
@@ -68,6 +81,16 @@ def _stats_cache_path(
     return cache_dir / slug
 
 
+def infer_adapter_num_labels(adapter_id: str) -> int | None:
+    path = hf_hub_download(repo_id=adapter_id, filename="adapter_model.safetensors")
+    with safe_open(path, framework="pt") as f:
+        for key in f.keys():
+            if key.endswith("score.weight") or key.endswith("classifier.weight"):
+                return int(f.get_tensor(key).shape[0])
+
+    return None
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--model-id", "--model_id", help="Base encoder.")
@@ -77,11 +100,42 @@ def parse_args() -> argparse.Namespace:
         default=None,
         help="Optional LoRA/PEFT adapter to merge on top of --model-id.",
     )
+    parser.add_argument(
+        "--model-type",
+        "--model_type",
+        choices=MODEL_TYPE_CHOICES,
+        default="base",
+        help=(
+            "Which Auto* class to load the encoder with: "
+            "'base' -> AutoModel, 'causal' -> AutoModelForCausalLM, "
+            "'cls' -> AutoModelForSequenceClassification."
+        ),
+    )
+    parser.add_argument(
+        "--num-labels",
+        "--num_labels",
+        type=int,
+        default=None,
+        help=(
+            "Classification head size when --model-type=cls. Auto-inferred "
+            "from the adapter's saved head if unset and --adapter-id is given. "
+            "Ignored for 'base' and 'causal' model types."
+        ),
+    )
     parser.add_argument("--pooling", choices=POOLING_CHOICES, default="cls")
     parser.add_argument("--batch-size", "--batch_size", type=int, default=4)
     parser.add_argument("--max-length", "--max_length", type=int, default=1024)
     parser.add_argument("--output-dir", "--output_dir", default="mood-bench-results")
     parser.add_argument("--use-mini", "--use_mini", action="store_true")
+    parser.add_argument(
+        "--domains",
+        nargs="+",
+        default=None,
+        help=(
+            "Subset of EvalDataset values to evaluate on (e.g. 'hh-rlhf-helpful "
+            "function-calling-missing'). Defaults to all domains."
+        ),
+    )
     parser.add_argument("--device", default=None)
     parser.add_argument(
         "--stats-batch-size",
@@ -121,15 +175,26 @@ def main() -> None:
     args = parse_args()
 
     device = t.device(args.device or ("cuda" if t.cuda.is_available() else "cpu"))
+    num_labels = args.num_labels
+    if args.model_type == "cls" and num_labels is None and args.adapter_id is not None:
+        num_labels = infer_adapter_num_labels(args.adapter_id)
+
     adapter_str = f" + adapter {args.adapter_id}" if args.adapter_id else ""
-    print(f"Loading encoder {args.model_id}{adapter_str} on {device}")
+    labels_str = (
+        f", num_labels={num_labels}" if args.model_type == "cls" and num_labels is not None else ""
+    )
+    print(f"Loading encoder {args.model_id}{adapter_str} on {device}{labels_str}")
 
     ### Load model and tokenizer ###
     tokenizer = load_tokenizer(args.adapter_id or args.model_id)
-    model = AutoModel.from_pretrained(args.model_id, torch_dtype="auto")
+    model_cls = MODEL_TYPE_TO_CLS[args.model_type]
+    from_pretrained_kwargs: dict[str, object] = {"torch_dtype": "auto"}
+    if args.model_type == "cls" and num_labels is not None:
+        from_pretrained_kwargs["num_labels"] = num_labels
+
+    model = model_cls.from_pretrained(args.model_id, **from_pretrained_kwargs)
     if getattr(model.config, "pad_token_id", None) is None:
         model.config.pad_token_id = tokenizer.pad_token_id
-
     if args.adapter_id is not None:
         model = PeftModel.from_pretrained(model, args.adapter_id).merge_and_unload()
 
@@ -165,19 +230,23 @@ def main() -> None:
         print(f"Saved Mahalanobis stats to {cache_path}")
 
     ### Run pipeline ###
+    domains = [EvalDataset(d) for d in args.domains] if args.domains else None
+    mean = stats["mean"].to(device=device, dtype=t.float64)
+    inv_cov = stats["inv_cov"].to(device=device, dtype=t.float64)
     dataset = mood_bench(
         pipelines=MahalanobisPipeline(
             model,
             tokenizer,
-            mean=stats["mean"],
-            inv_cov=stats["inv_cov"],
+            mean=mean,
+            inv_cov=inv_cov,
             pooling_strategy=args.pooling,
         ),
+        domains=domains,
         eval_batch_size=args.batch_size,
         output_dir=args.output_dir,
         use_mini=args.use_mini,
         max_length=args.max_length,
-        run_analysis=True,
+        include_figures=True,
     )
 
     print(f"Scored {len(dataset)} samples across domains: {sorted(set(dataset['domain']))}")

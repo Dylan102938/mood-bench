@@ -28,7 +28,12 @@ from transformers import AutoModelForCausalLM, AutoModelForSequenceClassificatio
 
 from mood_bench.aggregator import lambda_aggregate
 from mood_bench.core import mood_bench
-from mood_bench.data import ALL_EVALS, DEFAULT_IN_DISTR_DOMAINS, load_mood_dataset
+from mood_bench.data import (
+    ALL_EVALS,
+    DEFAULT_IN_DISTR_DOMAINS,
+    EvalDataset,
+    load_mood_dataset,
+)
 from mood_bench.pipeline.base import Pipeline, PipelineResult
 from mood_bench.pipeline.guard import GuardModelPipeline
 from mood_bench.pipeline.perplexity import PerplexityPipeline
@@ -152,6 +157,17 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--batch-size", "--batch_size", type=int, default=4)
     parser.add_argument("--max-length", "--max_length", type=int, default=1024)
     parser.add_argument("--output-dir", "--output_dir", default="mood-bench-results")
+    parser.add_argument("--use-mini", "--use_mini", action="store_true")
+    parser.add_argument(
+        "--domains",
+        nargs="+",
+        default=None,
+        help=(
+            "Subset of EvalDataset values to evaluate on (e.g. 'hh-rlhf-helpful "
+            "function-calling-missing'). Defaults to all domains. Note: the "
+            "lambda-coefficient fit still uses the full in-distribution set."
+        ),
+    )
     parser.add_argument("--device", default=None)
 
     return parser.parse_args()
@@ -177,6 +193,7 @@ def main() -> None:
     pipelines = [guard_fn, ppl_fn] if args.anchor == "guard" else [ppl_fn, guard_fn]
     id_dataset = build_id_dataset(args.max_length)
 
+    domains = [EvalDataset(d) for d in args.domains] if args.domains else None
     dataset = mood_bench(
         pipelines=pipelines,
         aggregator=lambda_aggregate,
@@ -185,8 +202,10 @@ def main() -> None:
             "anchor_index": 0,
             "fpr_threshold": args.fpr_threshold,
         },
+        domains=domains,
         eval_batch_size=args.batch_size,
         output_dir=args.output_dir,
+        use_mini=args.use_mini,
         max_length=args.max_length,
         run_analysis=True,
     )

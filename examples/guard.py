@@ -141,12 +141,11 @@ def main() -> None:
     )
     if getattr(model.config, "pad_token_id", None) is None:
         model.config.pad_token_id = tokenizer.pad_token_id
-
     if args.adapter_id is not None:
         model = PeftModel.from_pretrained(model, args.adapter_id).merge_and_unload()
-
     if args.device_map is None:
         model = model.to(device)
+
     model.eval()
 
     ### Run pipeline ###

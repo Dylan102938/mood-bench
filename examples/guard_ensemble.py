@@ -28,6 +28,7 @@ from transformers import AutoModelForSequenceClassification
 
 from mood_bench.aggregator import Aggregator, mean_aggregate, min_aggregate
 from mood_bench.core import mood_bench
+from mood_bench.data import EvalDataset
 from mood_bench.pipeline.base import Pipeline, PipelineResult
 from mood_bench.pipeline.guard import GuardModelPipeline
 from mood_bench.tokenize import load_tokenizer
@@ -94,6 +95,15 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--max-length", "--max_length", type=int, default=1024)
     parser.add_argument("--output-dir", "--output_dir", default="mood-bench-results")
     parser.add_argument("--use-mini", "--use_mini", action="store_true")
+    parser.add_argument(
+        "--domains",
+        nargs="+",
+        default=None,
+        help=(
+            "Subset of EvalDataset values to evaluate on (e.g. 'hh-rlhf-helpful "
+            "function-calling-missing'). Defaults to all domains."
+        ),
+    )
     parser.add_argument("--device", default=None, help="Fallback device for particles.")
     return parser.parse_args()
 
@@ -106,9 +116,11 @@ def main() -> None:
     if not particles:
         raise ValueError(f"No particles found in {args.config}")
 
+    domains = [EvalDataset(d) for d in args.domains] if args.domains else None
     dataset = mood_bench(
         pipelines=[make_guard_particle(p, fallback_device) for p in particles],
         aggregator=AGGREGATORS[args.aggregate],
+        domains=domains,
         eval_batch_size=args.batch_size,
         output_dir=args.output_dir,
         use_mini=args.use_mini,
