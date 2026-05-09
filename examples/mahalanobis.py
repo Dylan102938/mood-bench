@@ -37,6 +37,7 @@ from transformers import (
     AutoModelForCausalLM,
     AutoModelForSequenceClassification,
 )
+from utils import resolve_torch_dtype
 
 from mood_bench.core import mood_bench
 from mood_bench.data import EvalDataset
@@ -138,6 +139,16 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--device", default=None)
     parser.add_argument(
+        "--device-map",
+        "--device_map",
+        default=None,
+        help=(
+            "Optional ``device_map`` for ``from_pretrained`` (e.g. 'auto'). When set, "
+            "the model is placed/sharded via Accelerate and we skip the follow-up "
+            "``model.to(device)`` call. Use this for models too large for a single GPU."
+        ),
+    )
+    parser.add_argument(
         "--stats-batch-size",
         "--stats_batch_size",
         type=int,
@@ -167,6 +178,11 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Ignore any cached stats and recompute via get_stats_for_model.",
     )
+    parser.add_argument(
+        "--dtype",
+        default="bfloat16",
+        help="Dtype for model weights (e.g. bfloat16, float16, float32). Default: bfloat16.",
+    )
 
     return parser.parse_args()
 
@@ -188,17 +204,21 @@ def main() -> None:
     ### Load model and tokenizer ###
     tokenizer = load_tokenizer(args.adapter_id or args.model_id)
     model_cls = MODEL_TYPE_TO_CLS[args.model_type]
-    from_pretrained_kwargs: dict[str, object] = {"torch_dtype": "auto"}
+    from_pretrained_kwargs: dict[str, object] = {"dtype": resolve_torch_dtype(args.dtype)}
     if args.model_type == "cls" and num_labels is not None:
         from_pretrained_kwargs["num_labels"] = num_labels
+
+    if args.device_map is not None:
+        from_pretrained_kwargs["device_map"] = "auto"
 
     model = model_cls.from_pretrained(args.model_id, **from_pretrained_kwargs)
     if getattr(model.config, "pad_token_id", None) is None:
         model.config.pad_token_id = tokenizer.pad_token_id
     if args.adapter_id is not None:
         model = PeftModel.from_pretrained(model, args.adapter_id).merge_and_unload()
+    if args.device_map is None:
+        model = model.to(device)
 
-    model = model.to(device)
     model.eval()
 
     ### Fit stats (with on-disk cache) ###

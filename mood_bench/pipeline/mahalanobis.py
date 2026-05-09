@@ -43,7 +43,7 @@ def get_stats_for_model(
 ) -> dict[str, t.Tensor]:
     ds = load_mood_dataset(split="train")
 
-    safe_ds = ds.filter(lambda x: x["unsafe"] == 0)
+    safe_ds = ds.filter(lambda x: x["malign"] == 0)
     if max_samples is not None and safe_ds.num_rows > max_samples:
         safe_ds = safe_ds.shuffle().select(range(max_samples))
 
@@ -123,7 +123,7 @@ class MahalanobisPipeline(Pipeline):
             truncation=True,
             return_tensors="pt",
         ):
-            features = self._batch_inference(batch).to(t.float64)
+            features = self._batch_inference(batch).to(device=self.mean.device, dtype=t.bfloat16)
 
             centered = features - self.mean
             dists_squared = t.sum((centered @ self.inv_cov) * centered, dim=1)

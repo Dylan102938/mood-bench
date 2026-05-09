@@ -90,7 +90,7 @@ class PerplexityPipeline(Pipeline):
                 for i in range(len(samples))
             ]
 
-            return ppl.detach().cpu().numpy(), outliers
+            return ppl.detach().cpu().float().numpy(), outliers
 
     def _find_outlier_tokens(
         self,

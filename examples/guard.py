@@ -23,6 +23,7 @@ from huggingface_hub import hf_hub_download
 from peft import PeftModel
 from safetensors import safe_open
 from transformers import AutoModelForSequenceClassification
+from utils import resolve_torch_dtype
 
 from mood_bench.core import mood_bench
 from mood_bench.data import EvalDataset
@@ -110,6 +111,11 @@ def parse_args() -> argparse.Namespace:
             "Set this to false when your model's target class actually represents 'safe'."
         ),
     )
+    parser.add_argument(
+        "--dtype",
+        default="bfloat16",
+        help="Dtype for model weights (e.g. bfloat16, float16, float32). Default: bfloat16.",
+    )
 
     return parser.parse_args()
 
@@ -128,7 +134,7 @@ def main() -> None:
 
     ### Load model and tokenizer ###
     tokenizer = load_tokenizer(args.adapter_id or args.model_id)
-    from_pretrained_kwargs: dict[str, object] = {"torch_dtype": "auto"}
+    from_pretrained_kwargs: dict[str, object] = {"dtype": resolve_torch_dtype(args.dtype)}
     if num_labels is not None:
         from_pretrained_kwargs["num_labels"] = num_labels
     if args.device_map is not None:

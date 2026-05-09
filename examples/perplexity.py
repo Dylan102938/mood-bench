@@ -23,6 +23,7 @@ import argparse
 import torch as t
 from peft import PeftModel
 from transformers import AutoModelForCausalLM
+from utils import resolve_torch_dtype
 
 from mood_bench.core import mood_bench
 from mood_bench.data import EvalDataset
@@ -54,6 +55,16 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--device", default=None)
     parser.add_argument(
+        "--device-map",
+        "--device_map",
+        default=None,
+        help=(
+            "Optional ``device_map`` for ``from_pretrained`` (e.g. 'auto'). When set, "
+            "the model is placed/sharded via Accelerate and we skip the follow-up "
+            "``model.to(device)`` call. Use this for models too large for a single GPU."
+        ),
+    )
+    parser.add_argument(
         "--outlier-z-threshold",
         "--outlier_z_threshold",
         type=float,
@@ -62,6 +73,11 @@ def parse_args() -> argparse.Namespace:
             "Record per-sample tokens whose excess-surprise z-score exceeds this value. "
             "Pass a negative number to disable thresholding and record everything."
         ),
+    )
+    parser.add_argument(
+        "--dtype",
+        default="bfloat16",
+        help="Dtype for model weights (e.g. bfloat16, float16, float32). Default: bfloat16.",
     )
 
     return parser.parse_args()
@@ -78,13 +94,19 @@ def main() -> None:
 
     ### Load model and tokenizer ###
     tokenizer = load_tokenizer(args.adapter_id or args.model_id)
-    model = AutoModelForCausalLM.from_pretrained(args.model_id, torch_dtype="auto")
+    from_pretrained_kwargs: dict[str, object] = {"dtype": resolve_torch_dtype(args.dtype)}
+    if args.device_map is not None:
+        from_pretrained_kwargs["device_map"] = args.device_map
+        from_pretrained_kwargs["low_cpu_mem_usage"] = True
+
+    model = AutoModelForCausalLM.from_pretrained(args.model_id, **from_pretrained_kwargs)
     if getattr(model.config, "pad_token_id", None) is None:
         model.config.pad_token_id = tokenizer.pad_token_id
     if args.adapter_id is not None:
         model = PeftModel.from_pretrained(model, args.adapter_id).merge_and_unload()
+    if args.device_map is None:
+        model = model.to(device)
 
-    model = model.to(device)
     model.eval()
 
     ### Run pipeline ###
@@ -100,7 +122,7 @@ def main() -> None:
         output_dir=args.output_dir,
         use_mini=args.use_mini,
         max_length=args.max_length,
-        run_analysis=True,
+        include_figures=True,
     )
 
     print(f"Scored {len(dataset)} samples across domains: {sorted(set(dataset['domain']))}")

@@ -25,6 +25,7 @@ from huggingface_hub import hf_hub_download
 from peft import PeftModel
 from safetensors import safe_open
 from transformers import AutoModelForSequenceClassification
+from utils import resolve_torch_dtype
 
 from mood_bench.aggregator import Aggregator, mean_aggregate, min_aggregate
 from mood_bench.core import mood_bench
@@ -45,7 +46,11 @@ def infer_adapter_num_labels(adapter_id: str) -> int | None:
     return None
 
 
-def make_guard_particle(spec: dict[str, Any], fallback_device: t.device) -> Pipeline:
+def make_guard_particle(
+    spec: dict[str, Any],
+    fallback_device: t.device,
+    dtype: t.dtype,
+) -> Pipeline:
     spec = dict(spec)
     adapter_id = spec.get("adapter_id")
     spec["device"] = t.device(spec["device"]) if spec.get("device") else fallback_device
@@ -59,7 +64,7 @@ def make_guard_particle(spec: dict[str, Any], fallback_device: t.device) -> Pipe
 
         tokenizer = load_tokenizer(spec["tokenizer_id"])
 
-        load_kwargs: dict[str, Any] = {"torch_dtype": "auto"}
+        load_kwargs: dict[str, Any] = {"dtype": dtype}
         if spec.get("num_labels") is not None:
             load_kwargs["num_labels"] = spec["num_labels"]
 
@@ -105,6 +110,11 @@ def parse_args() -> argparse.Namespace:
         ),
     )
     parser.add_argument("--device", default=None, help="Fallback device for particles.")
+    parser.add_argument(
+        "--dtype",
+        default="bfloat16",
+        help="Dtype for model weights (e.g. bfloat16, float16, float32). Default: bfloat16.",
+    )
     return parser.parse_args()
 
 
@@ -116,9 +126,10 @@ def main() -> None:
     if not particles:
         raise ValueError(f"No particles found in {args.config}")
 
+    dtype = resolve_torch_dtype(args.dtype)
     domains = [EvalDataset(d) for d in args.domains] if args.domains else None
     dataset = mood_bench(
-        pipelines=[make_guard_particle(p, fallback_device) for p in particles],
+        pipelines=[make_guard_particle(p, fallback_device, dtype) for p in particles],
         aggregator=AGGREGATORS[args.aggregate],
         domains=domains,
         eval_batch_size=args.batch_size,

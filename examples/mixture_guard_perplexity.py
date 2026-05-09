@@ -25,6 +25,7 @@ from huggingface_hub import hf_hub_download
 from peft import PeftModel
 from safetensors import safe_open
 from transformers import AutoModelForCausalLM, AutoModelForSequenceClassification
+from utils import resolve_torch_dtype
 
 from mood_bench.aggregator import lambda_aggregate
 from mood_bench.core import mood_bench
@@ -64,6 +65,7 @@ def make_guard_pipeline(
     num_labels: int | None = None,
     unsafe_label_index: int = 1,
     predict_unsafe: bool = True,
+    dtype: t.dtype = t.bfloat16,
 ) -> Pipeline:
     if num_labels is None and adapter_id:
         num_labels = _infer_adapter_num_labels(adapter_id)
@@ -71,7 +73,7 @@ def make_guard_pipeline(
     def run(samples: list[str], **kwargs: Any) -> PipelineResult:
         print(f"[{run.__name__}] loading {model_id} on {device}")
         tokenizer = load_tokenizer(adapter_id or model_id)
-        load_kwargs: dict[str, Any] = {"torch_dtype": "auto"}
+        load_kwargs: dict[str, Any] = {"dtype": dtype}
         if num_labels is not None:
             load_kwargs["num_labels"] = num_labels
         model = AutoModelForSequenceClassification.from_pretrained(model_id, **load_kwargs)
@@ -101,11 +103,12 @@ def make_perplexity_pipeline(
     device: t.device,
     *,
     outlier_z_threshold: float | None = 3.0,
+    dtype: t.dtype = t.bfloat16,
 ) -> Pipeline:
     def run(samples: list[str], **kwargs: Any) -> PipelineResult:
         print(f"[{run.__name__}] loading {model_id} on {device}")
         tokenizer = load_tokenizer(adapter_id or model_id)
-        model = AutoModelForCausalLM.from_pretrained(model_id, torch_dtype="auto")
+        model = AutoModelForCausalLM.from_pretrained(model_id, dtype=dtype)
         if getattr(model.config, "pad_token_id", None) is None:
             model.config.pad_token_id = tokenizer.pad_token_id
         if adapter_id:
@@ -169,6 +172,11 @@ def parse_args() -> argparse.Namespace:
         ),
     )
     parser.add_argument("--device", default=None)
+    parser.add_argument(
+        "--dtype",
+        default="bfloat16",
+        help="Dtype for model weights (e.g. bfloat16, float16, float32). Default: bfloat16.",
+    )
 
     return parser.parse_args()
 
@@ -177,6 +185,7 @@ def main() -> None:
     args = parse_args()
     device = t.device(args.device or ("cuda" if t.cuda.is_available() else "cpu"))
 
+    dtype = resolve_torch_dtype(args.dtype)
     threshold = args.ppl_outlier_z_threshold if args.ppl_outlier_z_threshold >= 0 else None
     guard_fn = make_guard_pipeline(
         args.guard_model_id,
@@ -185,9 +194,14 @@ def main() -> None:
         num_labels=args.guard_num_labels,
         unsafe_label_index=args.guard_unsafe_label_index,
         predict_unsafe=args.guard_predict_unsafe,
+        dtype=dtype,
     )
     ppl_fn = make_perplexity_pipeline(
-        args.ppl_model_id, args.ppl_adapter_id, device, outlier_z_threshold=threshold
+        args.ppl_model_id,
+        args.ppl_adapter_id,
+        device,
+        outlier_z_threshold=threshold,
+        dtype=dtype,
     )
 
     pipelines = [guard_fn, ppl_fn] if args.anchor == "guard" else [ppl_fn, guard_fn]
