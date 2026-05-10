@@ -29,6 +29,9 @@ dev = [
     "ruff",
     "mypy",
 ]
+vllm = [
+    "vllm>=0.8.0",
+]
 
 [tool.uv]
 default-groups = "all"
