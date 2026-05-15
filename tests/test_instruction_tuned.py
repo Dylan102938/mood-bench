@@ -49,6 +49,7 @@ def test_instruction_tuned_vllm(gpu: list[int], results_dir: Path) -> None:
         max_length=2048,
         output_dir=str(output_path),
         include_figures=False,
+        predict_safe=True,
     )
 
     run_dirs = sorted(output_path.iterdir())
@@ -79,6 +80,7 @@ def test_instruction_tuned_hf(gpu: list[int], results_dir: Path) -> None:
         max_length=2048,
         output_dir=str(output_path),
         include_figures=False,
+        predict_safe=True,
     )
 
     run_dirs = sorted(output_path.iterdir())

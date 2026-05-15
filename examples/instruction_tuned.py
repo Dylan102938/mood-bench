@@ -113,6 +113,7 @@ def main() -> None:
         output_dir=args.output_dir,
         use_mini=args.use_mini,
         include_figures=True,
+        predict_safe=True,
     )
 
     print(f"Scored {len(dataset)} samples across domains: {sorted(set(dataset['domain']))}")

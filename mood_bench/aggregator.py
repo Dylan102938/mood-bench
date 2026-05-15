@@ -101,12 +101,11 @@ class MeanAggregate(Aggregator):
 
 
 class LambdaAggregate(Aggregator):
-    """Aggregate via ``anchor + c_1*aux_1 + c_2*aux_2 + ...``.
+    """Aggregate via ``anchor + coeff * mean(auxiliaries)``.
 
-    Coefficients are fitted by coordinate descent on a log-spaced grid,
-    choosing the largest coefficient that does not degrade TPR (at the given
-    FPR threshold) on in-distribution unsafe samples relative to the
-    anchor-only baseline.
+    A single coefficient is fitted on a log-spaced grid, choosing the largest
+    value that does not degrade TPR (at the given FPR threshold) on
+    in-distribution unsafe samples relative to the anchor-only baseline.
     """
 
     def __init__(
@@ -118,7 +117,6 @@ class LambdaAggregate(Aggregator):
         lambda_min_exp: float = -2.0,
         lambda_max_exp: float = 2.0,
         n_lambdas: int = 21,
-        n_passes: int = 1,
     ) -> None:
         self.anchor_index = anchor_index
         self.in_distr_domains = in_distr_domains
@@ -126,7 +124,6 @@ class LambdaAggregate(Aggregator):
         self.lambda_min_exp = lambda_min_exp
         self.lambda_max_exp = lambda_max_exp
         self.n_lambdas = n_lambdas
-        self.n_passes = n_passes
 
     def aggregate(self, results: list[Dataset]) -> Dataset:
         ### Input validation ###
@@ -153,37 +150,24 @@ class LambdaAggregate(Aggregator):
             id_safe_mask,
         )
 
-        ### Fit lambdas ###
+        ### Calculate lambda ###
+        aux_mean = auxiliaries.mean(axis=0)
         unsafe_labels_id = unsafe_labels[id_labels]
         anchor_id = anchor[id_labels]
-        auxiliaries_id = auxiliaries[:, id_labels]
+        aux_mean_id = aux_mean[id_labels]
 
-        coeffs = np.zeros(len(auxiliaries))
         grid = np.concatenate(
             [[0.0], 10.0 ** np.linspace(self.lambda_min_exp, self.lambda_max_exp, self.n_lambdas)]
         )
+        candidates = anchor_id[None, :] + grid[:, None] * aux_mean_id[None, :]
+        tprs = tpr_at_fpr(candidates, unsafe_labels_id, self.fpr_threshold)
+        baseline_tpr = tprs[0]
 
-        ### Coordinate descent ###
-        n_passes = 1 if len(auxiliaries_id) < 2 else self.n_passes
-        for _ in range(n_passes):
-            for i, aux in enumerate(auxiliaries_id):
-                baseline_scores = anchor_id + np.sum(
-                    np.delete(coeffs, i)[:, None] * np.delete(auxiliaries_id, i, axis=0),
-                    axis=0,
-                )
-                baseline_tpr = tpr_at_fpr(baseline_scores, unsafe_labels_id, self.fpr_threshold)
+        valid = np.where(tprs >= baseline_tpr)[0]
+        coeff = grid[valid[-1]] if len(valid) > 0 else 0.0
 
-                candidates = baseline_scores + grid[:, None] * aux
-                tprs = tpr_at_fpr(candidates, unsafe_labels_id, self.fpr_threshold)
-
-                valid = np.where(tprs >= baseline_tpr)[0]
-                coeffs[i] = grid[valid[-1]] if len(valid) > 0 else 0.0
-
-        ### Return final results ###
-        final_scores = anchor + np.sum(coeffs[:, None] * auxiliaries, axis=0)
-
+        final_scores = anchor + coeff * aux_mean
         out = _replace_score(anchor_ds, final_scores)
-        for i, c in enumerate(coeffs):
-            out = out.add_column(f"lambda_{i}", [float(c)] * len(out))
+        out = out.add_column("lambda", [float(coeff)] * len(out))
 
         return out

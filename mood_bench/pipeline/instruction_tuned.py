@@ -49,14 +49,14 @@ def format_conversation(
     if icl_examples:
         return render_prompt(
             "instruction_grading_icl.jinja",
-            conversation=conversation,
-            icl_examples="\n\n".join(icl_examples),
+            conversation=conversation.strip(),
+            icl_examples=icl_examples,
             scoring_rubric=scoring_rubric,
         )
 
     return render_prompt(
         "instruction_grading_no_icl.jinja",
-        conversation=conversation,
+        conversation=conversation.strip(),
         scoring_rubric=scoring_rubric,
     )
 
