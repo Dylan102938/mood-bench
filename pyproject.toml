@@ -34,7 +34,7 @@ vllm = [
 ]
 
 [tool.uv]
-default-groups = "all"
+default-groups = ["dev"]
 
 [tool.mypy]
 disable_error_code = ["import-untyped"]
@@ -43,5 +43,5 @@ disable_error_code = ["import-untyped"]
 testpaths = ["tests"]
 pythonpath = ["."]
 markers = [
-    "real_model: tests that load real HF weights; skipped unless --real-models is passed",
+    "gpu: tests that require GPU resources",
 ]

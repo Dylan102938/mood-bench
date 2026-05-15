@@ -6,7 +6,7 @@ particle's worth of weights lives in memory at a time.
 
 Particles are described in a JSON config with a ``particles`` list. Each entry
 requires ``model_id`` and optionally takes ``adapter_id``, ``tokenizer_id``,
-``num_labels``, ``unsafe_label_index``, ``predict_unsafe``, ``device``, ``name``.
+``num_labels``, ``unsafe_label_index``, ``device``, ``name``.
 
 Usage:
     python examples/guard_ensemble.py --config ensemble.json --aggregate mean
@@ -27,14 +27,14 @@ from safetensors import safe_open
 from transformers import AutoModelForSequenceClassification
 from utils import resolve_torch_dtype
 
-from mood_bench.aggregator import Aggregator, mean_aggregate, min_aggregate
+from mood_bench.aggregator import Aggregator, MeanAggregate, MinAggregate
 from mood_bench.core import mood_bench
 from mood_bench.data import EvalDataset
 from mood_bench.pipeline.base import Pipeline, PipelineResult
 from mood_bench.pipeline.guard import GuardModelPipeline
 from mood_bench.tokenize import load_tokenizer
 
-AGGREGATORS: dict[str, Aggregator] = {"mean": mean_aggregate, "min": min_aggregate}
+AGGREGATORS: dict[str, Aggregator] = {"mean": MeanAggregate(), "min": MinAggregate()}
 
 
 def infer_adapter_num_labels(adapter_id: str) -> int | None:
@@ -79,7 +79,6 @@ def make_guard_particle(
             return GuardModelPipeline(
                 model,
                 tokenizer,
-                predict_unsafe=spec.get("predict_unsafe", True),
                 unsafe_label_index=spec.get("unsafe_label_index", 1),
             )(samples, **kwargs)
         finally:
@@ -111,6 +110,16 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--device", default=None, help="Fallback device for particles.")
     parser.add_argument(
+        "--predict-safe",
+        "--predict_safe",
+        action="store_true",
+        default=False,
+        help=(
+            "If set, scores are flipped so that higher still means 'more unsafe'. "
+            "Use when your model's target class actually represents 'safe'."
+        ),
+    )
+    parser.add_argument(
         "--dtype",
         default="bfloat16",
         help="Dtype for model weights (e.g. bfloat16, float16, float32). Default: bfloat16.",
@@ -136,7 +145,7 @@ def main() -> None:
         output_dir=args.output_dir,
         use_mini=args.use_mini,
         max_length=args.max_length,
-        run_analysis=True,
+        predict_safe=args.predict_safe,
     )
 
     print(f"Scored {len(dataset)} samples with {len(particles)}-model {args.aggregate}-ensemble")

@@ -102,6 +102,16 @@ def parse_args() -> argparse.Namespace:
         ),
     )
     parser.add_argument(
+        "--predict-safe",
+        "--predict_safe",
+        action="store_true",
+        default=False,
+        help=(
+            "If set, scores are flipped so that higher still means 'more unsafe'. "
+            "Use when your model's target class actually represents 'safe'."
+        ),
+    )
+    parser.add_argument(
         "--predict-unsafe",
         "--predict_unsafe",
         type=parse_bool,
@@ -161,7 +171,6 @@ def main() -> None:
             model,
             tokenizer,
             unsafe_label_index=args.unsafe_label_index,
-            predict_unsafe=args.predict_unsafe,
         ),
         domains=domains,
         eval_batch_size=args.batch_size,
@@ -169,6 +178,7 @@ def main() -> None:
         use_mini=args.use_mini,
         max_length=args.max_length,
         include_figures=True,
+        predict_safe=args.predict_safe,
     )
 
     print(f"Scored {len(dataset)} samples across domains: {sorted(set(dataset['domain']))}")

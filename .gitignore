@@ -205,4 +205,12 @@ cython_debug/
 marimo/_static/
 marimo/_lsp/
 __marimo__/
-mood-bench-results/
+
+mood-bench-results*/
+tests/results/
+function-calling-missing-results/
+mahalanobis-stats-cache/
+models/
+old-models/
+scripts/
+old/

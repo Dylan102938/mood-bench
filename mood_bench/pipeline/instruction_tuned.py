@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import random
 import re
+from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable, Literal, cast
 
 import numpy as np
@@ -18,6 +19,9 @@ if TYPE_CHECKING:
 
 PromptBuilder = Callable[[str], str]
 
+_DEFAULT_CHAT_TEMPLATE_PATH = (
+    Path(__file__).resolve().parent.parent.parent / "prompts" / "default_chat_template.jinja"
+)
 SCORE_RE = re.compile(r"SCORE:\s*(100(?:\.0+)?|\d{1,2}(?:\.\d+)?)", re.IGNORECASE)
 RUBRIC_TEMPLATES: dict[str, str] = {
     "alignment": "scoring_rubric_alignment.jinja",
@@ -58,6 +62,15 @@ def format_conversation(
 
 
 class InstructionTunedPipeline(Pipeline):
+    _VLLM_ONLY_KEYS = frozenset(
+        {
+            "enforce_eager",
+            "gpu_memory_utilization",
+            "tensor_parallel_size",
+            "max_lora_rank",
+        }
+    )
+
     def __init__(
         self,
         model_name: str,
@@ -76,6 +89,7 @@ class InstructionTunedPipeline(Pipeline):
         gpu_memory_utilization: float = 0.9,
         tensor_parallel_size: int | None = None,
         max_lora_rank: int = 64,
+        enforce_eager: bool = False,
         **model_kwargs: Any,
     ) -> None:
         ### Model kwargs ###
@@ -86,6 +100,7 @@ class InstructionTunedPipeline(Pipeline):
         self._gpu_memory_utilization = gpu_memory_utilization
         self._tensor_parallel_size = tensor_parallel_size
         self._max_lora_rank = max_lora_rank
+        self._enforce_eager = enforce_eager
         self._model_kwargs = model_kwargs
 
         ### Sampling kwargs ###
@@ -187,13 +202,19 @@ class InstructionTunedPipeline(Pipeline):
             self._model_name if not self._is_lora_adapter else lora_config.base_model_name_or_path
         )
         max_lora_rank = self._max_lora_rank if self._is_lora_adapter else None
+
+        vllm_kwargs = dict(self._model_kwargs)
+        if "torch_dtype" in vllm_kwargs:
+            vllm_kwargs["dtype"] = str(vllm_kwargs.pop("torch_dtype")).replace("torch.", "")
+
         self._llm = LLM(
             model=model_name,
             tensor_parallel_size=tp,
             gpu_memory_utilization=self._gpu_memory_utilization,
             enable_lora=self._is_lora_adapter,
             max_lora_rank=max_lora_rank,
-            **self._model_kwargs,
+            enforce_eager=self._enforce_eager,
+            **vllm_kwargs,
         )
 
         ### (Optionally) load LoRA adapter ###
@@ -207,7 +228,10 @@ class InstructionTunedPipeline(Pipeline):
             )
 
         ### Load tokenizer and sampling parameters ###
-        self.tokenizer = self._llm.get_tokenizer()
+        self.tokenizer = load_tokenizer(self._model_name)
+        if self.tokenizer.chat_template is None:
+            self.tokenizer.chat_template = _DEFAULT_CHAT_TEMPLATE_PATH.read_text()
+
         self._sampling_params = SamplingParams(
             temperature=self._temperature,
             max_tokens=self._max_new_tokens,
@@ -229,15 +253,25 @@ class InstructionTunedPipeline(Pipeline):
             ### Load model and apply LoRA adapter ###
             lora_config = PeftConfig.from_pretrained(self._model_name)
             base_model_name = lora_config.base_model_name_or_path
-            model = AutoModelForCausalLM.from_pretrained(base_model_name, **self._model_kwargs)
+            model = AutoModelForCausalLM.from_pretrained(
+                base_model_name,
+                **{k: v for k, v in self._model_kwargs.items() if k not in self._VLLM_ONLY_KEYS},
+            )
             model = PeftModel.from_pretrained(model, self._model_name)
         else:
             ### Load model ###
             base_model_name = self._model_name
-            model = AutoModelForCausalLM.from_pretrained(base_model_name, **self._model_kwargs)
+            model = AutoModelForCausalLM.from_pretrained(
+                base_model_name,
+                **{k: v for k, v in self._model_kwargs.items() if k not in self._VLLM_ONLY_KEYS},
+            )
 
         ### Do additional configuration on model ###
-        self.tokenizer = load_tokenizer(base_model_name)
+        self.tokenizer = load_tokenizer(self._model_name)
+        if self.tokenizer.chat_template is None:
+            self.tokenizer = load_tokenizer(base_model_name)
+        if self.tokenizer.chat_template is None:
+            self.tokenizer.chat_template = _DEFAULT_CHAT_TEMPLATE_PATH.read_text()
         if getattr(model.config, "pad_token_id", None) is None:
             model.config.pad_token_id = self.tokenizer.pad_token_id
         if self._model_kwargs.get("device_map") is None:

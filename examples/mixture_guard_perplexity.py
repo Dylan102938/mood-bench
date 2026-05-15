@@ -20,20 +20,16 @@ import gc
 from typing import Any
 
 import torch as t
-from datasets import Dataset
 from huggingface_hub import hf_hub_download
 from peft import PeftModel
 from safetensors import safe_open
 from transformers import AutoModelForCausalLM, AutoModelForSequenceClassification
 from utils import resolve_torch_dtype
 
-from mood_bench.aggregator import lambda_aggregate
+from mood_bench.aggregator import LambdaAggregate
 from mood_bench.core import mood_bench
 from mood_bench.data import (
-    ALL_EVALS,
-    DEFAULT_IN_DISTR_DOMAINS,
     EvalDataset,
-    load_mood_dataset,
 )
 from mood_bench.pipeline.base import Pipeline, PipelineResult
 from mood_bench.pipeline.guard import GuardModelPipeline
@@ -64,7 +60,6 @@ def make_guard_pipeline(
     *,
     num_labels: int | None = None,
     unsafe_label_index: int = 1,
-    predict_unsafe: bool = True,
     dtype: t.dtype = t.bfloat16,
 ) -> Pipeline:
     if num_labels is None and adapter_id:
@@ -86,7 +81,6 @@ def make_guard_pipeline(
             return GuardModelPipeline(
                 model,
                 tokenizer,
-                predict_unsafe=predict_unsafe,
                 unsafe_label_index=unsafe_label_index,
             )(samples, **kwargs)
         finally:
@@ -126,16 +120,6 @@ def make_perplexity_pipeline(
     return run
 
 
-def build_id_dataset(max_length: int | None) -> Dataset:
-    """Load the test split with the same filter ``mood_bench`` will apply, and
-    tag each row with ``in_distribution`` so ``lambda_aggregate`` can fit
-    coefficients over in-distribution rows only.
-    """
-    ds = load_mood_dataset("test", domains=list(ALL_EVALS), max_length=max_length)
-    id_values = {d.value for d in DEFAULT_IN_DISTR_DOMAINS}
-    return ds.add_column("in_distribution", [d in id_values for d in ds["domain"]])
-
-
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--guard-model-id", "--guard_model_id", required=True)
@@ -145,17 +129,16 @@ def parse_args() -> argparse.Namespace:
         "--guard-unsafe-label-index", "--guard_unsafe_label_index", type=int, default=1
     )
     parser.add_argument(
-        "--guard-predict-unsafe",
-        "--guard_predict_unsafe",
-        action=argparse.BooleanOptionalAction,
-        default=True,
+        "--guard-predict-safe",
+        "--guard_predict_safe",
+        action="store_true",
+        default=False,
     )
     parser.add_argument("--ppl-model-id", "--ppl_model_id", required=True)
     parser.add_argument("--ppl-adapter-id", "--ppl_adapter_id", default=None)
     parser.add_argument(
         "--ppl-outlier-z-threshold", "--ppl_outlier_z_threshold", type=float, default=3.0
     )
-    parser.add_argument("--anchor", choices=["guard", "ppl"], default="guard")
     parser.add_argument("--fpr-threshold", "--fpr_threshold", type=float, default=0.01)
     parser.add_argument("--batch-size", "--batch_size", type=int, default=4)
     parser.add_argument("--max-length", "--max_length", type=int, default=1024)
@@ -193,7 +176,6 @@ def main() -> None:
         device,
         num_labels=args.guard_num_labels,
         unsafe_label_index=args.guard_unsafe_label_index,
-        predict_unsafe=args.guard_predict_unsafe,
         dtype=dtype,
     )
     ppl_fn = make_perplexity_pipeline(
@@ -205,23 +187,19 @@ def main() -> None:
     )
 
     pipelines = [guard_fn, ppl_fn] if args.anchor == "guard" else [ppl_fn, guard_fn]
-    id_dataset = build_id_dataset(args.max_length)
-
     domains = [EvalDataset(d) for d in args.domains] if args.domains else None
     dataset = mood_bench(
         pipelines=pipelines,
-        aggregator=lambda_aggregate,
-        aggregator_kwargs={
-            "id_dataset": id_dataset,
-            "anchor_index": 0,
-            "fpr_threshold": args.fpr_threshold,
-        },
+        aggregator=LambdaAggregate(
+            anchor_index=0,
+            fpr_threshold=args.fpr_threshold,
+        ),
         domains=domains,
         eval_batch_size=args.batch_size,
         output_dir=args.output_dir,
         use_mini=args.use_mini,
         max_length=args.max_length,
-        run_analysis=True,
+        predict_safe=[args.guard_predict_safe, False],
     )
 
     print(

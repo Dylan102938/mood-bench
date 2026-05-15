@@ -37,17 +37,17 @@ from datasets import Dataset, load_dataset
 
 from mood_bench.aggregator import (
     Aggregator,
-    lambda_aggregate,
-    mean_aggregate,
-    min_aggregate,
+    LambdaAggregate,
+    MeanAggregate,
+    MinAggregate,
 )
 from mood_bench.core import mood_bench_analysis
 from mood_bench.data import DEFAULT_IN_DISTR_DOMAINS, EvalDataset
 
 AGGREGATORS: dict[str, Aggregator] = {
-    "min": min_aggregate,
-    "mean": mean_aggregate,
-    "lambda": lambda_aggregate,
+    "min": MinAggregate(),
+    "mean": MeanAggregate(),
+    "lambda": LambdaAggregate(),
 }
 
 
@@ -150,13 +150,21 @@ def main() -> None:
         print("Note: --aggregator is ignored with a single results file.")
 
     datasets = [load_scored_jsonl(p) for p in args.results]
-    aggregator = AGGREGATORS[args.aggregator] if args.aggregator else None
 
     in_distr_domains = (
         [EvalDataset(d) for d in args.in_distr_domains]
         if args.in_distr_domains
         else tuple(DEFAULT_IN_DISTR_DOMAINS)
     )
+
+    if args.aggregator == "lambda":
+        aggregator = LambdaAggregate(in_distr_domains=in_distr_domains)
+    elif args.aggregator == "min":
+        aggregator = MinAggregate()
+    elif args.aggregator == "mean":
+        aggregator = MeanAggregate()
+    else:
+        aggregator = None
 
     args.output_dir.mkdir(parents=True, exist_ok=True)
     mood_bench_analysis(
