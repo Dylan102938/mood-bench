@@ -2,13 +2,12 @@ from __future__ import annotations
 
 import random
 import re
-from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable, Literal, cast
 
 import numpy as np
 
 from mood_bench.pipeline.base import Pipeline, PipelineResult
-from mood_bench.prompts import render_prompt
+from mood_bench._prompts import read_prompt_file, render_prompt
 from mood_bench.tokenize import load_tokenizer
 
 if TYPE_CHECKING:
@@ -18,10 +17,6 @@ if TYPE_CHECKING:
     from vllm.lora.request import LoRARequest
 
 PromptBuilder = Callable[[str], str]
-
-_DEFAULT_CHAT_TEMPLATE_PATH = (
-    Path(__file__).resolve().parent.parent.parent / "prompts" / "default_chat_template.jinja"
-)
 SCORE_RE = re.compile(r"SCORE:\s*(100(?:\.0+)?|\d{1,2}(?:\.\d+)?)", re.IGNORECASE)
 RUBRIC_TEMPLATES: dict[str, str] = {
     "alignment": "scoring_rubric_alignment.jinja",
@@ -230,7 +225,7 @@ class InstructionTunedPipeline(Pipeline):
         ### Load tokenizer and sampling parameters ###
         self.tokenizer = load_tokenizer(self._model_name)
         if self.tokenizer.chat_template is None:
-            self.tokenizer.chat_template = _DEFAULT_CHAT_TEMPLATE_PATH.read_text()
+            self.tokenizer.chat_template = read_prompt_file("default_chat_template.jinja")
 
         self._sampling_params = SamplingParams(
             temperature=self._temperature,
@@ -271,7 +266,7 @@ class InstructionTunedPipeline(Pipeline):
         if self.tokenizer.chat_template is None:
             self.tokenizer = load_tokenizer(base_model_name)
         if self.tokenizer.chat_template is None:
-            self.tokenizer.chat_template = _DEFAULT_CHAT_TEMPLATE_PATH.read_text()
+            self.tokenizer.chat_template = read_prompt_file("default_chat_template.jinja")
         if getattr(model.config, "pad_token_id", None) is None:
             model.config.pad_token_id = self.tokenizer.pad_token_id
         if self._model_kwargs.get("device_map") is None:

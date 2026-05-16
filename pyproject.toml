@@ -1,20 +1,36 @@
 [project]
 name = "mood-bench"
 version = "1.0.0"
-description = "Todo"
+description = "Mood-Bench: a multi-domain out-of-distribution safety benchmark for LLMs."
+readme = "README.md"
 requires-python = ">=3.12"
+license = { text = "MIT" }
+keywords = ["benchmark", "safety", "out-of-distribution", "llm"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
 dependencies = [
     "jinja2>=3.1.0",
     "datasets>=4.0.0",
-    "rich>=14.0.0",
     "scikit-learn>=1.7.1",
     "matplotlib>=3.8.0",
     "transformers>=4.55.4",
     "peft>=0.13.0",
-    "einops>=0.8.1",
-    "wandb>=0.21.3",
     "torch>=2.5.0",
 ]
+
+[project.scripts]
+mood = "mood_bench.cli:main"
+
+[project.optional-dependencies]
+vllm = ["vllm>=0.8.0"]
 
 [build-system]
 requires = ["hatchling"]
@@ -28,9 +44,6 @@ dev = [
     "pytest",
     "ruff",
     "mypy",
-]
-vllm = [
-    "vllm>=0.8.0",
 ]
 
 [tool.uv]
