@@ -163,7 +163,7 @@ def run(args: argparse.Namespace) -> None:
 
     ### Run mood_bench ###
     domains = parse_domains(args.domains)
-    dataset = mood_bench(
+    _, report = mood_bench(
         pipelines=MahalanobisPipeline(
             model,
             tokenizer,
@@ -179,4 +179,8 @@ def run(args: argparse.Namespace) -> None:
         include_figures=args.include_figures,
         predict_safe=False,
     )
-    print(f"Scored {len(dataset)} samples across domains: {sorted(set(dataset['domain']))}")
+    overall = report["groups"]["overall"]
+    print(
+        f"Scored {overall['n']} samples | "
+        f"AUROC={overall['auroc']:.3f}, TPR@FPR0.01={overall['tpr@fpr0.01'] * 100:.1f}%"
+    )

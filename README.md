@@ -20,10 +20,13 @@ from transformers import AutoModelForSequenceClassification
 model = AutoModelForSequenceClassification.from_pretrained("s-nlp/roberta_toxicity_classifier")
 tokenizer = load_tokenizer("s-nlp/roberta_toxicity_classifier")
 
-results = mood_bench(
+# Returns (scored_dataset, report). Pass output_dir=... to also persist
+# results.jsonl, analysis.json, and figures to disk.
+results, report = mood_bench(
     pipelines=GuardModelPipeline(model, tokenizer),
     use_mini=True,
 )
+print(report["groups"]["overall"])
 ```
 
 Run analysis on pre-scored results:

@@ -1,4 +1,4 @@
-"""Analysis-only tests that consume results.jsonl outputs from pipeline tests.
+"""Analysis-only tests that consume frozen ``results.jsonl`` fixtures.
 
 These tests re-run mood_bench_analysis on the saved pipeline outputs to validate
 metrics for various pipeline combinations (guard, guard+perplexity, guard+mahalanobis,
@@ -8,11 +8,8 @@ guard+IT uncertainty). No GPU required.
 
 from __future__ import annotations
 
-from pathlib import Path
-
-import pytest
-from conftest import RESULTS_DIR, get_metric, load_analysis
-from datasets import Dataset, load_dataset
+from conftest import assert_tpr_metrics, get_metric
+from datasets import Dataset
 
 from mood_bench.aggregator import LambdaAggregate
 from mood_bench.core import mood_bench_analysis
@@ -20,59 +17,26 @@ from mood_bench.core import mood_bench_analysis
 TOLERANCE = 2.0
 
 
-def _find_results_jsonl(pipeline_dir: Path) -> Path:
-    """Find the results.jsonl from the latest run directory under a pipeline output dir."""
-    if not pipeline_dir.exists():
-        pytest.skip(f"Pipeline output not found: {pipeline_dir}")
-    run_dirs = sorted(pipeline_dir.iterdir())
-    if not run_dirs:
-        pytest.skip(f"No run directories in {pipeline_dir}")
-    results_path = run_dirs[-1] / "results.jsonl"
-    if not results_path.exists():
-        pytest.skip(f"results.jsonl not found in {run_dirs[-1]}")
-    return results_path
-
-
-def _load_scored_dataset(pipeline_dir: Path) -> Dataset:
-    results_path = _find_results_jsonl(pipeline_dir)
-    ds = load_dataset("json", data_files=str(results_path), split="train")
-    if "malign" not in ds.column_names and "safe" in ds.column_names:
-        ds = ds.map(lambda ex: {"malign": int(not bool(ex["safe"]))})
-    return ds
-
-
-def _run_analysis_and_save(
+def _run_analysis(
     results: Dataset | list[Dataset],
-    output_name: str,
     aggregator=None,
     predict_safe: bool | list[bool] = False,
 ) -> dict:
-    output_path = RESULTS_DIR / output_name
-    mood_bench_analysis(
+    _, report = mood_bench_analysis(
         results=results,
         aggregator=aggregator,
-        output_path=output_path,
+        output_path=None,
         include_figures=False,
         predict_safe=predict_safe,
     )
-    return load_analysis(output_path)
-
-
-def _assert_tpr_metrics(analysis: dict, expected: dict[str, float]) -> None:
-    """Assert tpr@fpr0.01 (in percent) for each group matches expected within TOLERANCE."""
-    for group, expected_tpr in expected.items():
-        actual = get_metric(analysis, group, "tpr@fpr0.01") * 100
-        assert actual == pytest.approx(
-            expected_tpr, abs=TOLERANCE
-        ), f"{group}: {actual:.2f} != {expected_tpr} ± {TOLERANCE}"
+    return report
 
 
 class TestAnalysisGuardOnly:
-    def test_guard_analysis(self, results_dir: Path) -> None:
-        ds = _load_scored_dataset(results_dir / "guard")
-        analysis = _run_analysis_and_save(ds, "analysis_guard")
+    def test_guard_analysis(self, guard_dataset: Dataset) -> None:
+        analysis = _run_analysis(guard_dataset)
 
-        _assert_tpr_metrics(
+        assert_tpr_metrics(
             analysis,
             {
                 "id": 90.8,
@@ -85,21 +49,22 @@ class TestAnalysisGuardOnly:
                 "sycophantic": 49.9,
                 "overall": 38.8,
             },
+            tolerance=TOLERANCE,
         )
 
 
 class TestAnalysisGuardPerplexity:
-    def test_guard_perplexity_analysis(self, results_dir: Path) -> None:
-        guard_ds = _load_scored_dataset(results_dir / "guard")
-        ppl_ds = _load_scored_dataset(results_dir / "perplexity")
-
-        analysis = _run_analysis_and_save(
-            [guard_ds, ppl_ds],
-            "analysis_guard_perplexity",
+    def test_guard_perplexity_analysis(
+        self,
+        guard_dataset: Dataset,
+        perplexity_dataset: Dataset,
+    ) -> None:
+        analysis = _run_analysis(
+            [guard_dataset, perplexity_dataset],
             aggregator=LambdaAggregate(anchor_index=0, fpr_threshold=0.01),
         )
 
-        _assert_tpr_metrics(
+        assert_tpr_metrics(
             analysis,
             {
                 "id": 91.1,
@@ -112,21 +77,22 @@ class TestAnalysisGuardPerplexity:
                 "sycophantic": 57.5,
                 "overall": 43.1,
             },
+            tolerance=TOLERANCE,
         )
 
 
 class TestAnalysisGuardMahalanobis:
-    def test_guard_mahalanobis_analysis(self, results_dir: Path) -> None:
-        guard_ds = _load_scored_dataset(results_dir / "guard")
-        mahal_ds = _load_scored_dataset(results_dir / "mahalanobis")
-
-        analysis = _run_analysis_and_save(
-            [guard_ds, mahal_ds],
-            "analysis_guard_mahalanobis",
+    def test_guard_mahalanobis_analysis(
+        self,
+        guard_dataset: Dataset,
+        mahalanobis_dataset: Dataset,
+    ) -> None:
+        analysis = _run_analysis(
+            [guard_dataset, mahalanobis_dataset],
             aggregator=LambdaAggregate(anchor_index=0, fpr_threshold=0.01),
         )
 
-        _assert_tpr_metrics(
+        assert_tpr_metrics(
             analysis,
             {
                 "id": 91.3,
@@ -139,22 +105,23 @@ class TestAnalysisGuardMahalanobis:
                 "sycophantic": 53.8,
                 "overall": 44.8,
             },
+            tolerance=TOLERANCE,
         )
 
 
 class TestAnalysisGuardPerplexityMahalanobis:
-    def test_guard_perplexity_mahalanobis_analysis(self, results_dir: Path) -> None:
-        guard_ds = _load_scored_dataset(results_dir / "guard")
-        ppl_ds = _load_scored_dataset(results_dir / "perplexity")
-        mahal_ds = _load_scored_dataset(results_dir / "mahalanobis")
-
-        analysis = _run_analysis_and_save(
-            [guard_ds, ppl_ds, mahal_ds],
-            "analysis_guard_perplexity_mahalanobis",
+    def test_guard_perplexity_mahalanobis_analysis(
+        self,
+        guard_dataset: Dataset,
+        perplexity_dataset: Dataset,
+        mahalanobis_dataset: Dataset,
+    ) -> None:
+        analysis = _run_analysis(
+            [guard_dataset, perplexity_dataset, mahalanobis_dataset],
             aggregator=LambdaAggregate(anchor_index=0, fpr_threshold=0.01),
         )
 
-        _assert_tpr_metrics(
+        assert_tpr_metrics(
             analysis,
             {
                 "id": 91.2,
@@ -167,33 +134,34 @@ class TestAnalysisGuardPerplexityMahalanobis:
                 "sycophantic": 60.0,
                 "overall": 46.5,
             },
+            tolerance=TOLERANCE,
         )
 
 
 class TestAnalysisITAlignment:
-    def test_it_analysis(self, results_dir: Path) -> None:
-        ds = _load_scored_dataset(results_dir / "it_vllm")
-        analysis = _run_analysis_and_save(ds, "analysis_it", predict_safe=True)
+    def test_it_analysis(self, it_vllm_dataset: Dataset) -> None:
+        analysis = _run_analysis(it_vllm_dataset, predict_safe=True)
 
         # Per-domain checks are omitted; the IT fixture is known to be stale and
         # only id/overall expected values are tracked for now.
-        _assert_tpr_metrics(
+        assert_tpr_metrics(
             analysis,
             {
                 "id": 50.1,
                 "overall": 18.2,
             },
+            tolerance=TOLERANCE,
         )
 
 
 class TestAnalysisITAlignmentUncertainty:
-    def test_it_alignment_uncertainty_analysis(self, results_dir: Path) -> None:
-        alignment_ds = _load_scored_dataset(results_dir / "it_vllm")
-        uncertainty_ds = _load_scored_dataset(results_dir / "it_uncertainty")
-
-        analysis = _run_analysis_and_save(
-            [alignment_ds, uncertainty_ds],
-            "analysis_it_alignment_uncertainty",
+    def test_it_alignment_uncertainty_analysis(
+        self,
+        it_vllm_dataset: Dataset,
+        it_uncertainty_dataset: Dataset,
+    ) -> None:
+        analysis = _run_analysis(
+            [it_vllm_dataset, it_uncertainty_dataset],
             aggregator=LambdaAggregate(anchor_index=0, fpr_threshold=0.01),
             predict_safe=True,
         )
@@ -206,13 +174,13 @@ class TestAnalysisITAlignmentUncertainty:
 
 
 class TestAnalysisGuardITUncertainty:
-    def test_guard_it_uncertainty_analysis(self, results_dir: Path) -> None:
-        guard_ds = _load_scored_dataset(results_dir / "guard")
-        uncertainty_ds = _load_scored_dataset(results_dir / "it_uncertainty")
-
-        analysis = _run_analysis_and_save(
-            [guard_ds, uncertainty_ds],
-            "analysis_guard_it_uncertainty",
+    def test_guard_it_uncertainty_analysis(
+        self,
+        guard_dataset: Dataset,
+        it_uncertainty_dataset: Dataset,
+    ) -> None:
+        analysis = _run_analysis(
+            [guard_dataset, it_uncertainty_dataset],
             aggregator=LambdaAggregate(anchor_index=0, fpr_threshold=0.01),
             predict_safe=[False, True],
         )

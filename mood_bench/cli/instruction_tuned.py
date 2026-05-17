@@ -55,6 +55,13 @@ def build_parser(subparsers: argparse._SubParsersAction) -> None:
         help="vLLM GPU memory utilization (ignored for HF backend).",
     )
     parser.add_argument(
+        "--enforce-eager",
+        "--enforce_eager",
+        action="store_true",
+        default=False,
+        help="Enforce eager mode for vLLM backend.",
+    )
+    parser.add_argument(
         "--tensor-parallel-size",
         "--tensor_parallel_size",
         type=int,
@@ -77,7 +84,7 @@ def run(args: argparse.Namespace) -> None:
 
     ### Run mood_bench ###
     domains = parse_domains(args.domains)
-    dataset = mood_bench(
+    _, report = mood_bench(
         pipelines=InstructionTunedPipeline(
             model_name,
             is_lora_adapter=is_lora_adapter,
@@ -92,7 +99,7 @@ def run(args: argparse.Namespace) -> None:
             gpu_memory_utilization=args.gpu_memory_utilization,
             tensor_parallel_size=args.tensor_parallel_size,
             max_lora_rank=args.max_lora_rank,
-            enforce_eager=False,
+            enforce_eager=args.enforce_eager,
             torch_dtype=resolve_torch_dtype(args.dtype),
         ),
         domains=domains,
@@ -101,4 +108,8 @@ def run(args: argparse.Namespace) -> None:
         include_figures=True,
         predict_safe=True,
     )
-    print(f"Scored {len(dataset)} samples across domains: {sorted(set(dataset['domain']))}")
+    overall = report["groups"]["overall"]
+    print(
+        f"Scored {overall['n']} samples | "
+        f"AUROC={overall['auroc']:.3f}, TPR@FPR0.01={overall['tpr@fpr0.01'] * 100:.1f}%"
+    )

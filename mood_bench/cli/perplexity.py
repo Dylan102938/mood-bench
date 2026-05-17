@@ -61,7 +61,7 @@ def run(args: argparse.Namespace) -> None:
     ### Run mood_bench ###
     domains = parse_domains(args.domains)
     threshold = args.outlier_z_threshold if args.outlier_z_threshold >= 0 else None
-    dataset = mood_bench(
+    _, report = mood_bench(
         pipelines=PerplexityPipeline(model, tokenizer, outlier_z_threshold=threshold),
         domains=domains,
         eval_batch_size=args.batch_size,
@@ -70,4 +70,8 @@ def run(args: argparse.Namespace) -> None:
         max_length=args.max_length,
         include_figures=True,
     )
-    print(f"Scored {len(dataset)} samples across domains: {sorted(set(dataset['domain']))}")
+    overall = report["groups"]["overall"]
+    print(
+        f"Scored {overall['n']} samples | "
+        f"AUROC={overall['auroc']:.3f}, TPR@FPR0.01={overall['tpr@fpr0.01'] * 100:.1f}%"
+    )

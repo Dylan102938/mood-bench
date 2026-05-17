@@ -125,7 +125,7 @@ def mood_bench_analysis(
     include_figures: bool = True,
     output_path: str | Path | None = None,
     predict_safe: bool | list[bool] = False,
-) -> Dataset:
+) -> tuple[Dataset, dict[str, Any]]:
     if not isinstance(results, list):
         results = [results]
 
@@ -142,15 +142,15 @@ def mood_bench_analysis(
         for r, flip in zip(results, predict_safe)
     ]
 
-    ### Aggregate results if necessary and write results ###
-    output_path = Path(output_path)
-    output_path.mkdir(parents=True, exist_ok=True)
+    ### Aggregate results ###
     agg_results = aggregator(results) if aggregator is not None else results[0]
-    agg_results.to_json(output_path / "results.jsonl", orient="records", lines=True)
+    output_path = Path(output_path) if output_path is not None else None
+    if output_path is not None:
+        output_path.mkdir(parents=True, exist_ok=True)
+        agg_results.to_json(output_path / "results.jsonl", orient="records", lines=True)
 
-    ### Compute and save metrics ###
+    ### Compute metrics (and optionally save figures + analysis.json) ###
     df = agg_results.to_pandas()
-
     report = _compute_group_metrics(
         df,
         in_distr_domains,
@@ -158,10 +158,10 @@ def mood_bench_analysis(
         output_path=output_path if include_figures else None,
     )
 
-    analysis_path = output_path / "analysis.json"
-    analysis_path.write_text(json.dumps(_json_safe(report), indent=2))
+    if output_path is not None:
+        (output_path / "analysis.json").write_text(json.dumps(_json_safe(report), indent=2))
 
-    return agg_results
+    return agg_results, report
 
 
 def mood_bench(
@@ -169,7 +169,7 @@ def mood_bench(
     aggregator: Aggregator | None = None,
     domains: Iterable[EvalDataset] | None = None,
     eval_batch_size: int = 16,
-    output_dir: str | None = None,
+    output_dir: str | None = "./results/",
     use_mini: bool = False,
     in_distr_domains: Iterable[EvalDataset] | None = tuple(DEFAULT_IN_DISTR_DOMAINS),
     max_length: int | None = None,
@@ -177,10 +177,9 @@ def mood_bench(
     include_figures: bool = True,
     pipeline_kwargs: dict[str, Any] | None = None,
     predict_safe: bool | list[bool] = False,
-) -> Dataset:
+) -> tuple[Dataset, dict[str, Any]]:
     ### Define values robustly ###
     domains = domains or list(ALL_EVALS)
-    output_dir = output_dir or "mood-bench-results"
     if not isinstance(pipelines, list):
         pipelines = [pipelines]
     if len(pipelines) > 1:
@@ -220,13 +219,16 @@ def mood_bench(
 
         scored_datasets.append(scored_ds)
 
-    ### Build output path and delegate to mood_bench_analysis ###
-    pipe_names = [_get_pipeline_name(p) for p in pipelines]
-    run_name = "_".join(pipe_names)
-    if aggregator is not None:
-        run_name += f"_agg-{type(aggregator).__name__}"
-    run_name += f"_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
-    output_path = Path(output_dir) / run_name
+    ### Build output path (if requested) and delegate to mood_bench_analysis ###
+    output_path: Path | None = None
+    if output_dir is not None:
+        pipe_names = [_get_pipeline_name(p) for p in pipelines]
+        run_name = "_".join(pipe_names)
+        if aggregator is not None:
+            run_name += f"_agg-{type(aggregator).__name__}"
+        run_name += f"_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+
+        output_path = Path(output_dir) / run_name
 
     return mood_bench_analysis(
         results=scored_datasets,

@@ -46,14 +46,8 @@ def build_parser(subparsers: argparse._SubParsersAction) -> None:
         default=False,
         help="If set, scores are flipped so that higher still means 'more unsafe'.",
     )
-    parser.add_argument(
-        "--predict-safe",
-        "--predict_safe",
-        type="store_true",
-        default=False,
-        help="If true, the pipeline flips the score so higher means 'more unsafe'.",
-    )
     add_common_args(parser)
+
     parser.set_defaults(func=run)
 
 
@@ -89,7 +83,7 @@ def run(args: argparse.Namespace) -> None:
 
     ### Run mood_bench ###
     domains = parse_domains(args.domains)
-    dataset = mood_bench(
+    _, report = mood_bench(
         pipelines=GuardModelPipeline(model, tokenizer, args.unsafe_label_index),
         domains=domains,
         eval_batch_size=args.batch_size,
@@ -100,4 +94,8 @@ def run(args: argparse.Namespace) -> None:
         predict_safe=args.predict_safe,
     )
 
-    print(f"Scored {len(dataset)} samples across domains: {sorted(set(dataset['domain']))}")
+    overall = report["groups"]["overall"]
+    print(
+        f"Scored {overall['n']} samples | "
+        f"AUROC={overall['auroc']:.3f}, TPR@FPR0.01={overall['tpr@fpr0.01'] * 100:.1f}%"
+    )

@@ -5,11 +5,18 @@ import json
 import os
 import queue
 import threading
+import urllib.error
+import urllib.request
 from pathlib import Path
 from typing import Generator
 
 import pytest
 import torch as t
+from datasets import Dataset, load_dataset
+
+RELEASE_REPO = "Dylan102938/mood-bench"
+RELEASE_TAG = "test-fixtures-v1"
+RESULTS_DIR = Path(__file__).parent / "results"
 
 
 class GPUPool:
@@ -48,9 +55,6 @@ def _discover_gpu_ids() -> list[int]:
     return list(range(n))
 
 
-RESULTS_DIR = Path(__file__).parent / "results"
-
-
 def _get_worker_id(request: pytest.FixtureRequest) -> str:
     if hasattr(request.config, "workerinput"):
         return request.config.workerinput["workerid"]
@@ -75,7 +79,6 @@ def gpu_pool(request: pytest.FixtureRequest) -> GPUPool:
 
 @pytest.fixture()
 def gpu(gpu_pool: GPUPool) -> Generator[list[int], None, None]:
-    """Acquire 1 GPU, set CUDA_VISIBLE_DEVICES, yield, then release."""
     ids = gpu_pool.acquire(n=1)
     old_env = os.environ.get("CUDA_VISIBLE_DEVICES")
     os.environ["CUDA_VISIBLE_DEVICES"] = ",".join(str(i) for i in ids)
@@ -104,3 +107,99 @@ def load_analysis(results_path: Path) -> dict:
 
 def get_metric(analysis: dict, group: str, metric: str) -> float:
     return analysis["groups"][group][metric]
+
+
+def assert_tpr_metrics(
+    analysis: dict,
+    expected: dict[str, float],
+    *,
+    tolerance: float,
+    fpr: float = 0.01,
+) -> None:
+    """Assert that ``tpr@fpr{fpr}`` matches ``expected[group]`` (percent) within ``tolerance``."""
+    metric = f"tpr@fpr{fpr}"
+    for group, expected_tpr in expected.items():
+        actual = get_metric(analysis, group, metric) * 100
+        assert actual == pytest.approx(
+            expected_tpr, abs=tolerance
+        ), f"{group}: {actual:.2f} != {expected_tpr} ± {tolerance}"
+
+
+def _download_release_asset(repo: str, tag: str, asset_name: str, dest: Path) -> bool:
+    api_url = f"https://api.github.com/repos/{repo}/releases/tags/{tag}"
+    token = os.environ.get("GITHUB_TOKEN") or os.environ.get("GH_TOKEN")
+    headers = {
+        "Accept": "application/vnd.github+json",
+        "X-GitHub-Api-Version": "2022-11-28",
+    }
+    if token:
+        headers["Authorization"] = f"token {token}"
+
+    req = urllib.request.Request(api_url, headers=headers)
+    try:
+        with urllib.request.urlopen(req) as resp:
+            release = json.loads(resp.read())
+    except urllib.error.HTTPError as e:
+        if e.code == 404:
+            return False
+        raise
+
+    asset = next((a for a in release.get("assets", []) if a["name"] == asset_name), None)
+    if asset is None:
+        return False
+
+    dl_headers = dict(headers)
+    dl_headers["Accept"] = "application/octet-stream"
+    dl_req = urllib.request.Request(asset["url"], headers=dl_headers)
+    with urllib.request.urlopen(dl_req) as resp:
+        dest.write_bytes(resp.read())
+    return True
+
+
+def _release_asset_or_skip(asset_name: str, tmp_path_factory: pytest.TempPathFactory) -> Path:
+    """Download ``<asset_name>.jsonl`` from the configured release or skip.
+
+    Skips the requesting test if the asset is missing or the download fails.
+    """
+    dest = tmp_path_factory.mktemp(f"release_{asset_name}") / f"{asset_name}.jsonl"
+    try:
+        ok = _download_release_asset(RELEASE_REPO, RELEASE_TAG, f"{asset_name}.jsonl", dest)
+    except Exception as e:  # noqa: BLE001
+        pytest.skip(f"Fixture download failed for {asset_name}.jsonl: {e}")
+
+    if not ok:
+        pytest.skip(f"Release fixture {asset_name!r} not available")
+
+    return dest
+
+
+def _load_scored_dataset(path: Path) -> Dataset:
+    ds = load_dataset("json", data_files=str(path), split="train")
+    if "malign" not in ds.column_names and "safe" in ds.column_names:
+        ds = ds.map(lambda ex: {"malign": int(not bool(ex["safe"]))})
+    return ds
+
+
+@pytest.fixture(scope="session")
+def guard_dataset(tmp_path_factory: pytest.TempPathFactory) -> Dataset:
+    return _load_scored_dataset(_release_asset_or_skip("guard", tmp_path_factory))
+
+
+@pytest.fixture(scope="session")
+def perplexity_dataset(tmp_path_factory: pytest.TempPathFactory) -> Dataset:
+    return _load_scored_dataset(_release_asset_or_skip("perplexity", tmp_path_factory))
+
+
+@pytest.fixture(scope="session")
+def mahalanobis_dataset(tmp_path_factory: pytest.TempPathFactory) -> Dataset:
+    return _load_scored_dataset(_release_asset_or_skip("mahalanobis", tmp_path_factory))
+
+
+@pytest.fixture(scope="session")
+def it_vllm_dataset(tmp_path_factory: pytest.TempPathFactory) -> Dataset:
+    return _load_scored_dataset(_release_asset_or_skip("it_vllm", tmp_path_factory))
+
+
+@pytest.fixture(scope="session")
+def it_uncertainty_dataset(tmp_path_factory: pytest.TempPathFactory) -> Dataset:
+    return _load_scored_dataset(_release_asset_or_skip("it_uncertainty", tmp_path_factory))
