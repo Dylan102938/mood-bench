@@ -122,20 +122,20 @@ def build_parser(subparsers: argparse._SubParsersAction) -> None:
 def _verify_and_load_dataset(path: Path) -> Dataset:
     ds = load_dataset("json", data_files=str(path), split="train")
 
-    if "malign" not in ds.column_names:
+    if "malign" not in ds.column_names and "safe" not in ds.column_names:
         if "safe" not in ds.column_names:
             raise ValueError(
                 f"{path} is missing both 'malign' and 'safe' columns; "
                 "cannot determine per-row labels."
             )
+
         ds = ds.map(lambda ex: {"malign": int(not bool(ex["safe"]))})
 
     if "score" not in ds.column_names:
         raise ValueError(f"{path} is missing a 'score' column.")
 
-    for required in ("id", "conversation", "domain"):
-        if required not in ds.column_names:
-            raise ValueError(f"{path} is missing required column '{required}'.")
+    if any(required not in ds.column_names for required in ("id", "conversation", "domain")):
+        raise ValueError(f"{path} needs to have `id`, `conversation`, and `domain` columns.")
 
     return ds
 
@@ -173,10 +173,10 @@ def run(args: argparse.Namespace) -> None:
     mood_bench_analysis(
         results=datasets,
         aggregator=aggregator,
-        output_path=args.output_dir,
         in_distr_domains=in_distr_domains,
         fpr_targets=tuple(args.fpr_targets),
         include_figures=not args.no_figures,
+        output_path=args.output_dir,
         predict_safe=args.predict_safe,
     )
 

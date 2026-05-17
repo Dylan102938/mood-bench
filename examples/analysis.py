@@ -1,33 +1,3 @@
-"""Generate a mood-bench report from one or more pre-scored JSONL files.
-
-Each input JSONL must contain at least the columns ``id``, ``conversation``,
-``domain``, ``score``, and a per-row ``malign`` (or ``safe``) label. ``safe`` is
-automatically converted to ``malign = 1 - safe``. Any extra columns are kept
-and treated as pipeline metadata.
-
-By default ``score`` is interpreted as a malign-ness score (higher = more
-malign). Pass ``--predict-safe`` if your scores instead predict safety
-(higher = more safe); the score column will be negated inside
-:func:`mood_bench.core.mood_bench_analysis` so all downstream artifacts
-(``results.jsonl``, ``analysis.json``, figures) use the canonical
-"higher = more malign" convention.
-
-Examples:
-    # Single scored run -> writes results.jsonl + analysis.json (+ figures)
-    python examples/analysis.py mood-bench-results/gemma-9b-mahalanobis.jsonl \\
-        --output-dir mood-bench-reports/gemma-9b-mahalanobis
-
-    # Scores are 'higher = safer' (e.g. log-likelihood of safety) -> negate them
-    python examples/analysis.py safety-scores.jsonl \\
-        --predict-safe \\
-        --output-dir mood-bench-reports/safety-scores
-
-    # Aggregate two scored runs and report on the combined score
-    python examples/analysis.py run-a.jsonl run-b.jsonl \\
-        --aggregator mean \\
-        --output-dir mood-bench-reports/ensemble
-"""
-
 from __future__ import annotations
 
 import argparse
@@ -35,14 +5,15 @@ from pathlib import Path
 
 from datasets import Dataset, load_dataset
 
-from mood_bench.aggregator import (
+from mood_bench import (
+    DEFAULT_IN_DISTR_DOMAINS,
     Aggregator,
+    EvalDataset,
     LambdaAggregate,
     MeanAggregate,
     MinAggregate,
+    mood_bench_analysis,
 )
-from mood_bench.core import mood_bench_analysis
-from mood_bench.data import DEFAULT_IN_DISTR_DOMAINS, EvalDataset
 
 AGGREGATORS: dict[str, Aggregator] = {
     "min": MinAggregate(),

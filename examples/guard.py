@@ -8,9 +8,7 @@ from peft import PeftModel
 from safetensors import safe_open
 from transformers import AutoModelForSequenceClassification
 
-from mood_bench.core import mood_bench
-from mood_bench.pipeline.guard import GuardModelPipeline
-from mood_bench.tokenize import load_tokenizer
+from mood_bench import GuardModelPipeline, load_tokenizer, mood_bench
 
 
 def _infer_num_labels(adapter_id: str) -> int | None:

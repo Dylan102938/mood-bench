@@ -176,7 +176,7 @@ def run(args: argparse.Namespace) -> None:
         output_dir=args.output_dir,
         use_mini=args.use_mini,
         max_length=args.max_length,
-        include_figures=args.include_figures,
+        include_figures=not args.no_figures,
         predict_safe=False,
     )
     overall = report["groups"]["overall"]
