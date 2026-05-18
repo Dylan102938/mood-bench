@@ -9,6 +9,7 @@ import torch as t
 from peft import PeftModel
 from transformers import AutoModelForSequenceClassification
 
+from mood_bench._output import print_report_table
 from mood_bench.cli._common import (
     add_common_args,
     infer_adapter_num_labels,
@@ -140,10 +141,14 @@ def run(args: argparse.Namespace) -> None:
     )
 
     if cache_path.exists() and not args.refit_stats:
-        print(f"Loading cached Mahalanobis stats from {cache_path}")
+        from mood_bench._output import info
+
+        info(f"Loading cached Mahalanobis stats from {cache_path}")
         stats = t.load(cache_path, map_location="cpu", weights_only=True)
     else:
-        print(
+        from mood_bench._output import info
+
+        info(
             f"Fitting Mahalanobis stats ({args.pooling} pooling, "
             f"max_samples={args.stats_max_samples})"
         )
@@ -159,7 +164,7 @@ def run(args: argparse.Namespace) -> None:
             {k: v.detach().cpu() for k, v in stats.items()},
             cache_path,
         )
-        print(f"Saved Mahalanobis stats to {cache_path}")
+        info(f"Saved Mahalanobis stats to {cache_path}")
 
     ### Run mood_bench ###
     domains = parse_domains(args.domains)
@@ -179,8 +184,5 @@ def run(args: argparse.Namespace) -> None:
         include_figures=not args.no_figures,
         predict_safe=False,
     )
-    overall = report["groups"]["overall"]
-    print(
-        f"Scored {overall['n']} samples | "
-        f"AUROC={overall['auroc']:.3f}, TPR@FPR0.01={overall['tpr@fpr0.01'] * 100:.1f}%"
-    )
+
+    print_report_table(report, title=f"Mahalanobis · {args.adapter_id or args.model_id}")

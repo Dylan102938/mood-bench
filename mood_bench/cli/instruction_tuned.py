@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 
+from mood_bench._output import print_report_table
 from mood_bench.cli._common import (
     add_common_args,
     parse_domains,
@@ -108,8 +109,5 @@ def run(args: argparse.Namespace) -> None:
         include_figures=not args.no_figures,
         predict_safe=True,
     )
-    overall = report["groups"]["overall"]
-    print(
-        f"Scored {overall['n']} samples | "
-        f"AUROC={overall['auroc']:.3f}, TPR@FPR0.01={overall['tpr@fpr0.01'] * 100:.1f}%"
-    )
+
+    print_report_table(report, title=f"Instruction-Tuned · {args.adapter_id or args.model_id}")

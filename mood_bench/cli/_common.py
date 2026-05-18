@@ -88,3 +88,10 @@ def add_common_args(parser: argparse.ArgumentParser, base_model_required: bool =
         default=False,
         help="Run pipeline and analysis only, do not generate accompanying figures.",
     )
+    parser.add_argument(
+        "-v",
+        "--verbose",
+        action="store_true",
+        default=False,
+        help="Print additional informational messages (cache hits, GPU detection, etc.).",
+    )

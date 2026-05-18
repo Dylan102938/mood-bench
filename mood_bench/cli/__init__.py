@@ -48,6 +48,9 @@ def main(argv: list[str] | None = None) -> None:
         sys.exit(1)
 
     if hasattr(args, "func"):
+        from mood_bench._output import set_verbose
+
+        set_verbose(getattr(args, "verbose", False))
         args.func(args)
     else:
         parser.print_help()

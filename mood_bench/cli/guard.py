@@ -94,8 +94,6 @@ def run(args: argparse.Namespace) -> None:
         predict_safe=args.predict_safe,
     )
 
-    overall = report["groups"]["overall"]
-    print(
-        f"Scored {overall['n']} samples | "
-        f"AUROC={overall['auroc']:.3f}, TPR@FPR0.01={overall['tpr@fpr0.01'] * 100:.1f}%"
-    )
+    from mood_bench._output import print_report_table
+
+    print_report_table(report, title=f"Guard · {args.adapter_id or args.model_id}")

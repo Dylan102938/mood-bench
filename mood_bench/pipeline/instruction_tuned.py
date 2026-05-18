@@ -6,8 +6,9 @@ from typing import TYPE_CHECKING, Any, Callable, Literal, cast
 
 import numpy as np
 
-from mood_bench.pipeline.base import Pipeline, PipelineResult
+import mood_bench._output as logger
 from mood_bench._prompts import read_prompt_file, render_prompt
+from mood_bench.pipeline.base import Pipeline, PipelineResult
 from mood_bench.tokenize import load_tokenizer
 
 if TYPE_CHECKING:
@@ -124,9 +125,9 @@ class InstructionTunedPipeline(Pipeline):
             if find_spec("vllm") is not None:
                 self._load_vllm()
             else:
-                print(
-                    "WARNING: vLLM not installed, falling back to HF transformers backend. It is"
-                    " recommended that you install vLLM for faster inference."
+                logger.warn(
+                    "vLLM not installed, falling back to HF transformers backend. "
+                    "Install vLLM for faster inference."
                 )
                 self._load_hf()
 
@@ -142,7 +143,7 @@ class InstructionTunedPipeline(Pipeline):
             if not pending:
                 break
             if attempt > 0:
-                print(
+                logger.info(
                     f"InstructionTunedPipeline: resampling {len(pending)} unparseable "
                     f"output(s) (attempt {attempt}/{self.max_retries})"
                 )
@@ -168,7 +169,7 @@ class InstructionTunedPipeline(Pipeline):
 
         ### Handle any remaining errors ###
         if pending:
-            print(
+            logger.warn(
                 f"InstructionTunedPipeline: defaulting {len(pending)} sample(s) to "
                 f"{self.default_score} after {self.max_retries} retries"
             )
@@ -186,7 +187,7 @@ class InstructionTunedPipeline(Pipeline):
         lora_config: PeftConfig | None = None
         if tp is None:
             tp = torch.cuda.device_count()
-            print(f"vLLM: auto-detected {tp} GPU(s)")
+            logger.info(f"vLLM: auto-detected {tp} GPU(s)")
         if self._is_lora_adapter:
             from peft import PeftConfig
 

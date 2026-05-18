@@ -72,6 +72,13 @@ def build_parser(subparsers: argparse._SubParsersAction) -> None:
         action="store_true",
         help="Treat input 'score' columns as safety scores (higher = more safe).",
     )
+    parser.add_argument(
+        "-v",
+        "--verbose",
+        action="store_true",
+        default=False,
+        help="Print additional informational messages.",
+    )
 
     lambda_group = parser.add_argument_group(
         "lambda aggregator options",
@@ -141,10 +148,12 @@ def _verify_and_load_dataset(path: Path) -> Dataset:
 
 
 def run(args: argparse.Namespace) -> None:
+    from mood_bench._output import info, print_report_table, warn
+
     if len(args.results) > 1 and args.aggregator is None:
         raise SystemExit("--aggregator is required when more than one results file is passed.")
     if len(args.results) == 1 and args.aggregator is not None:
-        print("Note: --aggregator is ignored with a single results file.")
+        warn("--aggregator is ignored with a single results file.")
 
     datasets = [_verify_and_load_dataset(p) for p in args.results]
     in_distr_domains = (
@@ -170,7 +179,7 @@ def run(args: argparse.Namespace) -> None:
         aggregator = None
 
     args.output_dir.mkdir(parents=True, exist_ok=True)
-    mood_bench_analysis(
+    _, report = mood_bench_analysis(
         results=datasets,
         aggregator=aggregator,
         in_distr_domains=in_distr_domains,
@@ -180,6 +189,5 @@ def run(args: argparse.Namespace) -> None:
         predict_safe=args.predict_safe,
     )
 
-    print(f"Wrote mood-bench report to {args.output_dir}")
-    print(f"  - {args.output_dir / 'results.jsonl'}")
-    print(f"  - {args.output_dir / 'analysis.json'}")
+    info(f"Wrote report to {args.output_dir}")
+    print_report_table(report)

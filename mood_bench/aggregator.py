@@ -6,6 +6,7 @@ from collections.abc import Iterable
 import numpy as np
 from datasets import Dataset
 
+import mood_bench._output as logger
 from mood_bench.data import DEFAULT_IN_DISTR_DOMAINS, EvalDataset
 from mood_bench.metrics import tpr_at_fpr
 
@@ -21,9 +22,8 @@ def _align_datasets(results: list[Dataset]) -> list[Dataset]:
         common_ids &= other_ids
 
     if dropped_ids:
-        print(
-            "%d ids not present in all pipelines — dropping them from alignment",
-            len(dropped_ids),
+        logger.warn(
+            f"{len(dropped_ids)} ids not present in all pipelines — dropping them from alignment"
         )
 
     if len(common_ids) < len(results[0]):

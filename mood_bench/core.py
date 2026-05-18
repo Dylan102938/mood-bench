@@ -9,6 +9,7 @@ import pandas as pd
 from datasets import Dataset, concatenate_datasets
 from sklearn.metrics import roc_auc_score
 
+from mood_bench._output import status
 from mood_bench.aggregator import Aggregator
 from mood_bench.data import (
     ALL_EVALS,
@@ -211,7 +212,12 @@ def mood_bench(
     pipeline_kwargs = pipeline_kwargs or {}
     scored_datasets: list[Dataset] = []
     for p in pipelines:
-        scores, meta = p(dataset["conversation"], batch_size=eval_batch_size, **pipeline_kwargs)
+        with status(f"Scoring with [bold]{_get_pipeline_name(p)}[/bold]..."):
+            scores, meta = p(
+                dataset["conversation"],
+                batch_size=eval_batch_size,
+                **pipeline_kwargs,
+            )
         scored_ds = dataset.add_column("score", scores.tolist())
         for key, value in meta.items():
             if isinstance(value, list):
