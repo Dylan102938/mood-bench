@@ -2,19 +2,7 @@ from __future__ import annotations
 
 import argparse
 
-import torch as t
-from peft import PeftModel
-from transformers import AutoModelForCausalLM
-
-from mood_bench._output import print_report_table
-from mood_bench.cli._common import (
-    add_common_args,
-    parse_domains,
-    resolve_torch_dtype,
-)
-from mood_bench.core import mood_bench
-from mood_bench.pipeline.perplexity import PerplexityPipeline
-from mood_bench.tokenize import load_tokenizer
+from mood_bench.cli._common import add_common_args
 
 
 def build_parser(subparsers: argparse._SubParsersAction) -> None:
@@ -38,6 +26,16 @@ def build_parser(subparsers: argparse._SubParsersAction) -> None:
 
 
 def run(args: argparse.Namespace) -> None:
+    import torch as t
+    from peft import PeftModel
+    from transformers import AutoModelForCausalLM
+
+    from mood_bench._output import print_report_table
+    from mood_bench.cli._common import parse_domains, resolve_torch_dtype
+    from mood_bench.core import mood_bench
+    from mood_bench.pipeline.perplexity import PerplexityPipeline
+    from mood_bench.tokenize import load_tokenizer
+
     ### Define defaults ###
     default_device = "cuda" if t.cuda.is_available() else "cpu"
     device = t.device(args.device or default_device)

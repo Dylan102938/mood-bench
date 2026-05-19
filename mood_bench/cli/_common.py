@@ -1,29 +1,32 @@
 from __future__ import annotations
 
 import argparse
+from typing import TYPE_CHECKING
 
-import torch as t
+if TYPE_CHECKING:
+    import torch as t
 
-from mood_bench.data import EvalDataset
+    from mood_bench.data import EvalDataset
 
-_DTYPE_ALIASES: dict[str, t.dtype] = {
-    "auto": t.bfloat16,
-    "bf16": t.bfloat16,
-    "bfloat16": t.bfloat16,
-    "fp16": t.float16,
-    "float16": t.float16,
-    "half": t.float16,
-    "fp32": t.float32,
-    "float32": t.float32,
-    "float": t.float32,
+_DTYPE_ALIASES: dict[str, str] = {
+    "auto": "bfloat16",
+    "bf16": "bfloat16",
+    "bfloat16": "bfloat16",
+    "fp16": "float16",
+    "float16": "float16",
+    "half": "float16",
+    "fp32": "float32",
+    "float32": "float32",
+    "float": "float32",
 }
 
 
-def resolve_torch_dtype(name: str) -> t.dtype:
+def resolve_torch_dtype(name: str) -> "t.dtype":
+    import torch as t
+
     key = name.strip().lower()
-    if key in _DTYPE_ALIASES:
-        return _DTYPE_ALIASES[key]
-    dtype = getattr(t, key, None)
+    canonical = _DTYPE_ALIASES.get(key, key)
+    dtype = getattr(t, canonical, None)
     if isinstance(dtype, t.dtype):
         return dtype
     raise ValueError(
@@ -31,9 +34,12 @@ def resolve_torch_dtype(name: str) -> t.dtype:
     )
 
 
-def parse_domains(raw: list[str] | None) -> list[EvalDataset] | None:
+def parse_domains(raw: list[str] | None) -> "list[EvalDataset] | None":
+    from mood_bench.data import EvalDataset
+
     if raw is None:
         return None
+
     return [EvalDataset(d) for d in raw]
 
 
@@ -63,7 +69,7 @@ def add_common_args(parser: argparse.ArgumentParser, base_model_required: bool =
         help="Optional LoRA/PEFT adapter to merge on top of --model-id.",
     )
     parser.add_argument("--batch-size", "--batch_size", type=int, default=4)
-    parser.add_argument("--max-length", "--max_length", type=int, default=1024)
+    parser.add_argument("--max-length", "--max_length", type=int, default=2048)
     parser.add_argument("--output-dir", "--output_dir", default="mood-bench-results")
     parser.add_argument("--use-mini", "--use_mini", action="store_true")
     parser.add_argument(

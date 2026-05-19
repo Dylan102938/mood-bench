@@ -2,14 +2,7 @@ from __future__ import annotations
 
 import argparse
 
-from mood_bench._output import print_report_table
-from mood_bench.cli._common import (
-    add_common_args,
-    parse_domains,
-    resolve_torch_dtype,
-)
-from mood_bench.core import mood_bench
-from mood_bench.pipeline.instruction_tuned import InstructionTunedPipeline
+from mood_bench.cli._common import add_common_args
 
 
 def build_parser(subparsers: argparse._SubParsersAction) -> None:
@@ -75,6 +68,11 @@ def build_parser(subparsers: argparse._SubParsersAction) -> None:
 
 
 def run(args: argparse.Namespace) -> None:
+    from mood_bench._output import print_report_table
+    from mood_bench.cli._common import parse_domains, resolve_torch_dtype
+    from mood_bench.core import mood_bench
+    from mood_bench.pipeline.instruction_tuned import InstructionTunedPipeline
+
     ### Define defaults ###
     if args.adapter_id is not None:
         model_name = args.adapter_id

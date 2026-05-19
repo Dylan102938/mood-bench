@@ -253,7 +253,7 @@ class TestGuardCLI:
     def test_metrics(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
         _install_pipeline_stub(
             monkeypatch,
-            "mood_bench.cli.guard.GuardModelPipeline",
+            "mood_bench.pipeline.guard.GuardModelPipeline",
             self.SPECS,
             np.random.default_rng(seed=42),
         )
@@ -283,7 +283,7 @@ class TestGuardCLI:
         no_flip = tmp_path / "no_flip"
         _install_pipeline_stub(
             monkeypatch,
-            "mood_bench.cli.guard.GuardModelPipeline",
+            "mood_bench.pipeline.guard.GuardModelPipeline",
             inverted,
             np.random.default_rng(seed=7),
         )
@@ -303,7 +303,7 @@ class TestGuardCLI:
         flip = tmp_path / "flip"
         _install_pipeline_stub(
             monkeypatch,
-            "mood_bench.cli.guard.GuardModelPipeline",
+            "mood_bench.pipeline.guard.GuardModelPipeline",
             inverted,
             np.random.default_rng(seed=7),
         )
@@ -324,7 +324,7 @@ class TestGuardCLI:
     def test_use_mini(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
         _install_pipeline_stub(
             monkeypatch,
-            "mood_bench.cli.guard.GuardModelPipeline",
+            "mood_bench.pipeline.guard.GuardModelPipeline",
             self.SPECS,
             np.random.default_rng(seed=99),
         )
@@ -355,7 +355,7 @@ class TestPerplexityCLI:
     def test_metrics(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
         _install_pipeline_stub(
             monkeypatch,
-            "mood_bench.cli.perplexity.PerplexityPipeline",
+            "mood_bench.pipeline.perplexity.PerplexityPipeline",
             self.SPECS,
             np.random.default_rng(seed=11),
         )
@@ -375,7 +375,7 @@ class TestPerplexityCLI:
     def test_use_mini(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
         _install_pipeline_stub(
             monkeypatch,
-            "mood_bench.cli.perplexity.PerplexityPipeline",
+            "mood_bench.pipeline.perplexity.PerplexityPipeline",
             self.SPECS,
             np.random.default_rng(seed=55),
         )
@@ -409,12 +409,12 @@ class TestMahalanobisCLI:
     ) -> None:
         _install_pipeline_stub(
             monkeypatch,
-            "mood_bench.cli.mahalanobis.MahalanobisPipeline",
+            "mood_bench.pipeline.mahalanobis.MahalanobisPipeline",
             self.SPECS,
             np.random.default_rng(seed=seed),
         )
         monkeypatch.setattr(
-            "mood_bench.cli.mahalanobis.get_stats_for_model",
+            "mood_bench.pipeline.mahalanobis.get_stats_for_model",
             lambda *a, **kw: {"mean": t.zeros(8), "inv_cov": t.eye(8)},
         )
 
@@ -499,7 +499,7 @@ class TestInstructionTunedCLI:
     def test_metrics(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
         _install_pipeline_stub(
             monkeypatch,
-            "mood_bench.cli.instruction_tuned.InstructionTunedPipeline",
+            "mood_bench.pipeline.instruction_tuned.InstructionTunedPipeline",
             self.SPECS,
             np.random.default_rng(seed=17),
         )
@@ -690,7 +690,7 @@ class TestOutputArtifacts:
     ) -> None:
         _install_pipeline_stub(
             monkeypatch,
-            "mood_bench.cli.guard.GuardModelPipeline",
+            "mood_bench.pipeline.guard.GuardModelPipeline",
             self.SPECS,
             np.random.default_rng(seed=50),
         )
@@ -718,7 +718,7 @@ class TestOutputArtifacts:
     ) -> None:
         _install_pipeline_stub(
             monkeypatch,
-            "mood_bench.cli.guard.GuardModelPipeline",
+            "mood_bench.pipeline.guard.GuardModelPipeline",
             self.SPECS,
             np.random.default_rng(seed=51),
         )

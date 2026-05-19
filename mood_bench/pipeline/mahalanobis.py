@@ -40,6 +40,7 @@ def get_stats_for_model(
     pooling_strategy: PoolingStrategy = "cls",
     batch_size: int = 16,
     max_samples: int | None = None,
+    max_length: int = 2048,
 ) -> dict[str, t.Tensor]:
     ds = load_mood_dataset(split="train")
 
@@ -55,7 +56,7 @@ def get_stats_for_model(
             renderer=tokenizer,
             device=model.device,
             batch_size=batch_size,
-            max_length=4096,
+            max_length=max_length,
             padding=True,
             truncation=True,
             return_tensors="pt",
@@ -70,7 +71,8 @@ def get_stats_for_model(
             pooled_features = (
                 _pool_hidden_states(last_hidden_state, batch["attention_mask"], pooling_strategy)
                 .contiguous()
-                .clone()
+                .detach()
+                .cpu()
             )
 
             features_list.append(pooled_features)

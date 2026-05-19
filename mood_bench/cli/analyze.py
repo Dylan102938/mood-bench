@@ -2,23 +2,12 @@ from __future__ import annotations
 
 import argparse
 from pathlib import Path
+from typing import TYPE_CHECKING
 
-from datasets import Dataset, load_dataset
+if TYPE_CHECKING:
+    from mood_bench.aggregator import Aggregator
 
-from mood_bench.aggregator import (
-    Aggregator,
-    LambdaAggregate,
-    MeanAggregate,
-    MinAggregate,
-)
-from mood_bench.core import mood_bench_analysis
-from mood_bench.data import DEFAULT_IN_DISTR_DOMAINS, EvalDataset
-
-AGGREGATORS: dict[str, Aggregator] = {
-    "min": MinAggregate(),
-    "mean": MeanAggregate(),
-    "lambda": LambdaAggregate(),
-}
+AGGREGATOR_NAMES: dict[str, Aggregator] = ("lambda", "mean", "min")
 
 
 def build_parser(subparsers: argparse._SubParsersAction) -> None:
@@ -41,7 +30,7 @@ def build_parser(subparsers: argparse._SubParsersAction) -> None:
     )
     parser.add_argument(
         "--aggregator",
-        choices=sorted(AGGREGATORS),
+        choices=sorted(AGGREGATOR_NAMES),
         default=None,
         help="How to combine multiple scored runs. Required when more than one file is passed.",
     )
@@ -126,7 +115,9 @@ def build_parser(subparsers: argparse._SubParsersAction) -> None:
     parser.set_defaults(func=run)
 
 
-def _verify_and_load_dataset(path: Path) -> Dataset:
+def _verify_and_load_dataset(path: Path):  # -> Dataset
+    from datasets import load_dataset
+
     ds = load_dataset("json", data_files=str(path), split="train")
 
     if "malign" not in ds.column_names and "safe" not in ds.column_names:
@@ -149,6 +140,9 @@ def _verify_and_load_dataset(path: Path) -> Dataset:
 
 def run(args: argparse.Namespace) -> None:
     from mood_bench._output import info, print_report_table, warn
+    from mood_bench.aggregator import LambdaAggregate, MeanAggregate, MinAggregate
+    from mood_bench.core import mood_bench_analysis
+    from mood_bench.data import DEFAULT_IN_DISTR_DOMAINS, EvalDataset
 
     if len(args.results) > 1 and args.aggregator is None:
         raise SystemExit("--aggregator is required when more than one results file is passed.")
@@ -163,7 +157,7 @@ def run(args: argparse.Namespace) -> None:
     )
 
     if args.aggregator == "lambda":
-        aggregator: Aggregator | None = LambdaAggregate(
+        aggregator = LambdaAggregate(
             anchor_index=args.anchor_index,
             in_distr_domains=in_distr_domains,
             fpr_threshold=args.fpr_threshold,

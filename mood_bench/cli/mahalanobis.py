@@ -4,25 +4,12 @@ import argparse
 import hashlib
 import os
 from pathlib import Path
+from typing import TYPE_CHECKING
 
-import torch as t
-from peft import PeftModel
-from transformers import AutoModelForSequenceClassification
+from mood_bench.cli._common import add_common_args
 
-from mood_bench._output import print_report_table
-from mood_bench.cli._common import (
-    add_common_args,
-    infer_adapter_num_labels,
-    parse_domains,
-    resolve_torch_dtype,
-)
-from mood_bench.core import mood_bench
-from mood_bench.pipeline.mahalanobis import (
-    MahalanobisPipeline,
-    PoolingStrategy,
-    get_stats_for_model,
-)
-from mood_bench.tokenize import load_tokenizer
+if TYPE_CHECKING:
+    from mood_bench.pipeline.mahalanobis import PoolingStrategy
 
 POOLING_CHOICES: tuple[PoolingStrategy, ...] = ("cls", "mean", "max")
 DEFAULT_STATS_CACHE_DIR = Path(
@@ -102,6 +89,20 @@ def _stats_cache_path(
 
 
 def run(args: argparse.Namespace) -> None:
+    import torch as t
+    from peft import PeftModel
+    from transformers import AutoModelForSequenceClassification
+
+    from mood_bench._output import info, print_report_table
+    from mood_bench.cli._common import (
+        infer_adapter_num_labels,
+        parse_domains,
+        resolve_torch_dtype,
+    )
+    from mood_bench.core import mood_bench
+    from mood_bench.pipeline.mahalanobis import MahalanobisPipeline, get_stats_for_model
+    from mood_bench.tokenize import load_tokenizer
+
     ### Define defaults ###
     default_device = "cuda" if t.cuda.is_available() else "cpu"
     device = t.device(args.device or default_device)
@@ -141,13 +142,9 @@ def run(args: argparse.Namespace) -> None:
     )
 
     if cache_path.exists() and not args.refit_stats:
-        from mood_bench._output import info
-
         info(f"Loading cached Mahalanobis stats from {cache_path}")
         stats = t.load(cache_path, map_location="cpu", weights_only=True)
     else:
-        from mood_bench._output import info
-
         info(
             f"Fitting Mahalanobis stats ({args.pooling} pooling, "
             f"max_samples={args.stats_max_samples})"
@@ -158,6 +155,7 @@ def run(args: argparse.Namespace) -> None:
             pooling_strategy=args.pooling,
             batch_size=args.stats_batch_size,
             max_samples=args.stats_max_samples,
+            max_length=args.max_length,
         )
         cache_path.parent.mkdir(parents=True, exist_ok=True)
         t.save(
