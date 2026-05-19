@@ -11,7 +11,7 @@ from mood_bench.core import mood_bench
 from mood_bench.data import DEFAULT_IN_DISTR_DOMAINS, EvalDataset
 from mood_bench.pipeline.instruction_tuned import InstructionTunedPipeline
 
-ADAPTER_ID = "shizwick/google-gemma-2-9b_ultrachat-it"
+ADAPTER_ID = "mood-bench/gemma-2-9b-tulu3-sft-lora"
 TOLERANCE = 2.0
 
 

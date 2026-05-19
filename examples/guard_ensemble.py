@@ -68,11 +68,11 @@ def main() -> None:
 
     device = "cuda" if t.cuda.is_available() else "cpu"
     adapter_ids: Iterable[str] = (
-        "shizwick/ensemble_google_gemma-2-9b-particle-00",
-        "shizwick/ensemble_google_gemma-2-9b-particle-01",
-        "shizwick/ensemble_google_gemma-2-9b-particle-02",
-        "shizwick/ensemble_google_gemma-2-9b-particle-03",
-        "shizwick/ensemble_google_gemma-2-9b-particle-04",
+        "mood-bench/gemma-2-9b-guard-ensemble-p0",
+        "mood-bench/gemma-2-9b-guard-ensemble-p1",
+        "mood-bench/gemma-2-9b-guard-ensemble-p2",
+        "mood-bench/gemma-2-9b-guard-ensemble-p3",
+        "mood-bench/gemma-2-9b-guard-ensemble-p4",
     )
 
     mood_bench(

@@ -45,7 +45,7 @@ pip install mood-bench[vllm]
 Clone the repo:
 
 ```bash
-git clone https://github.com/shizwick/mood-bench.git
+git clone https://github.com/Dylan102938/mood-bench.git
 cd mood-bench
 ```
 
@@ -104,7 +104,7 @@ mood bench guard \
 ```bash
 mood bench perplexity \
     --model-id google/gemma-2-2b \
-    --adapter-id shizwick/google-gemma-2-2b_causal-lm \
+    --adapter-id mood-bench/gemma-2-2b-causal-lm \
     --output-dir results/perplexity \
     --batch-size 8 \
     --max-length 2048
@@ -115,7 +115,7 @@ mood bench perplexity \
 ```bash
 mood bench mahalanobis \
     --model-id google/gemma-2-2b \
-    --adapter-id shizwick/google-gemma-2-2b_guard \
+    --adapter-id mood-bench/gemma-2-2b-guard \
     --pooling cls \
     --stats-cache-dir mahalanobis-stats/ \
     --output-dir results/mahalanobis \
@@ -177,7 +177,7 @@ The CLI is a thin wrapper around the `mood_bench` Python API. To plug in your ow
 from mood_bench import mood_bench, GuardModelPipeline, load_tokenizer
 from transformers import AutoModelForSequenceClassification
 
-tokenizer = load_tokenizer("shizwick/google-gemma-2-2b_guard")
+tokenizer = load_tokenizer("mood-bench/gemma-2-2b-guard")
 model = AutoModelForSequenceClassification.from_pretrained(
     "google/gemma-2-2b", dtype="bfloat16"
 )

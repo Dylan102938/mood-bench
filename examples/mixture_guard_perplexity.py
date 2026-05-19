@@ -31,8 +31,8 @@ def _infer_num_labels(adapter_id: str) -> int | None:
 
 def guard_pipeline(device: str) -> Pipeline:
     def run(samples: list[str], **kwargs) -> PipelineResult:
-        tokenizer = load_tokenizer("shizwick/google-gemma-2-2b_guard")
-        num_labels = _infer_num_labels("shizwick/google-gemma-2-2b_guard")
+        tokenizer = load_tokenizer("mood-bench/gemma-2-2b-guard")
+        num_labels = _infer_num_labels("mood-bench/gemma-2-2b-guard")
         base_model = AutoModelForSequenceClassification.from_pretrained(
             tokenizer.name_or_path,
             dtype=t.bfloat16,
@@ -41,7 +41,7 @@ def guard_pipeline(device: str) -> Pipeline:
         if base_model.config.pad_token_id is None:
             base_model.config.pad_token_id = tokenizer.pad_token_id
 
-        model = PeftModel.from_pretrained(base_model, "shizwick/google-gemma-2-2b_guard")
+        model = PeftModel.from_pretrained(base_model, "mood-bench/gemma-2-2b-guard")
         model = model.to(device)
         model.eval()
 
@@ -60,12 +60,12 @@ def guard_pipeline(device: str) -> Pipeline:
 
 def perplexity_pipeline(device: str) -> Pipeline:
     def run(samples: list[str], **kwargs) -> PipelineResult:
-        tokenizer = load_tokenizer("shizwick/google-gemma-2-2b_causal-lm")
+        tokenizer = load_tokenizer("mood-bench/gemma-2-2b-causal-lm")
         base_model = AutoModelForCausalLM.from_pretrained(tokenizer.name_or_path, dtype=t.bfloat16)
         if base_model.config.pad_token_id is None:
             base_model.config.pad_token_id = tokenizer.pad_token_id
 
-        model = PeftModel.from_pretrained(base_model, "shizwick/google-gemma-2-2b_causal-lm")
+        model = PeftModel.from_pretrained(base_model, "mood-bench/gemma-2-2b-causal-lm")
         model = model.to(device)
         model.eval()
 

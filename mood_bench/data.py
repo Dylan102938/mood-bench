@@ -62,7 +62,7 @@ def load_mood_dataset(
     max_length: int | None = None,
     max_length_tokenizer: str | None = None,
 ) -> Dataset:
-    ds = load_dataset("shizwick/mood-bench", split=split)
+    ds = load_dataset("mood-bench/mood-bench", split=split)
 
     if domains:
         ds = ds.filter(lambda ex: ex["domain"] in [d.value for d in domains])

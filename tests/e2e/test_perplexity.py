@@ -12,7 +12,7 @@ from mood_bench.core import mood_bench
 from mood_bench.pipeline.perplexity import PerplexityPipeline
 from mood_bench.tokenize import load_tokenizer
 
-ADAPTER_ID = "shizwick/google-gemma-2-9b_causal-lm"
+ADAPTER_ID = "mood-bench/gemma-2-9b-causal-lm"
 TOLERANCE = 2.0
 
 

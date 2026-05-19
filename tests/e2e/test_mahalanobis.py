@@ -14,7 +14,7 @@ from mood_bench.core import mood_bench
 from mood_bench.pipeline.mahalanobis import MahalanobisPipeline, get_stats_for_model
 from mood_bench.tokenize import load_tokenizer
 
-ADAPTER_ID = "shizwick/google-gemma-2-9b_guard"
+ADAPTER_ID = "mood-bench/gemma-2-9b-guard"
 POOLING = "cls"
 TOLERANCE = 2.0
 

@@ -28,8 +28,8 @@ def main() -> None:
     )
     args = parser.parse_args()
 
-    tokenizer = load_tokenizer("shizwick/google-gemma-2-2b_guard")
-    num_labels = _infer_num_labels("shizwick/google-gemma-2-2b_guard")
+    tokenizer = load_tokenizer("mood-bench/gemma-2-2b-guard")
+    num_labels = _infer_num_labels("mood-bench/gemma-2-2b-guard")
     base_model = AutoModelForSequenceClassification.from_pretrained(
         tokenizer.name_or_path,
         dtype=t.bfloat16,
@@ -39,7 +39,7 @@ def main() -> None:
         base_model.config.pad_token_id = tokenizer.pad_token_id
 
     device = "cuda" if t.cuda.is_available() else "cpu"
-    model = PeftModel.from_pretrained(base_model, "shizwick/google-gemma-2-2b_guard")
+    model = PeftModel.from_pretrained(base_model, "mood-bench/gemma-2-2b-guard")
     model = model.to(device)
     model.eval()
 

@@ -12,7 +12,7 @@ from transformers import AutoModelForSequenceClassification
 
 from mood_bench import GuardModelPipeline, load_tokenizer, mood_bench
 
-MODEL_ID = "shizwick/google-gemma-2-9b_guard"
+MODEL_ID = "mood-bench/gemma-2-9b-guard"
 TOLERANCE = 0.5
 
 
