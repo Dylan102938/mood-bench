@@ -1,0 +1,85 @@
+name: Version bump check
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      # Re-run only when something that could affect a publish changes.
+      # Keep this broad so the check is a hard gate, not opt-in.
+      - "**"
+      - "!**/*.md"
+      - "!.github/**"
+
+permissions:
+  contents: read
+
+jobs:
+  verify-version-bump:
+    name: Verify pyproject.toml version is bumped
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Need both PR head and the base branch to compare.
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: python -m pip install --upgrade packaging
+
+      - name: Compare versions
+        shell: bash
+        env:
+          BASE_REF: ${{ github.event.pull_request.base.ref }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          python <<'PY'
+          import os
+          import subprocess
+          import sys
+          import tomllib
+          from packaging.version import InvalidVersion, Version
+
+          base_sha = os.environ["BASE_SHA"]
+          base_ref = os.environ["BASE_REF"]
+
+          def read_version(blob: bytes) -> str | None:
+              return tomllib.loads(blob.decode()).get("project", {}).get("version")
+
+          with open("pyproject.toml", "rb") as f:
+              new_version_str = read_version(f.read())
+          if not new_version_str:
+              sys.exit("pyproject.toml is missing [project].version")
+          try:
+              new_version = Version(new_version_str)
+          except InvalidVersion as e:
+              sys.exit(f"Invalid PR-head version {new_version_str!r}: {e}")
+
+          try:
+              base_blob = subprocess.check_output(
+                  ["git", "show", f"{base_sha}:pyproject.toml"],
+                  stderr=subprocess.DEVNULL,
+              )
+          except subprocess.CalledProcessError:
+              sys.exit(f"Could not read pyproject.toml at base {base_ref}@{base_sha[:8]}")
+
+          base_version_str = read_version(base_blob)
+          if not base_version_str:
+              print("Base branch has no version; allowing.")
+              sys.exit(0)
+          try:
+              base_version = Version(base_version_str)
+          except InvalidVersion as e:
+              sys.exit(f"Invalid base version {base_version_str!r}: {e}")
+
+          if new_version <= base_version:
+              sys.exit(
+                  f"::error file=pyproject.toml::Version was not bumped: "
+                  f"{base_version} (on {base_ref}) -> {new_version} (PR head). "
+                  "Bump pyproject.toml [project].version before merging."
+              )
+          print(f"Version bump OK: {base_version} -> {new_version}")
+          PY
