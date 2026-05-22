@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from importlib.metadata import PackageNotFoundError
+from importlib.metadata import version as _pkg_version
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -28,7 +30,12 @@ if TYPE_CHECKING:
     )
     from mood_bench.tokenize import load_tokenizer
 
-__version__ = "1.0.0"
+try:
+    __version__ = _pkg_version("mood-bench")
+except PackageNotFoundError:
+    # Running from a source checkout that hasn't been pip-installed.
+    __version__ = "0.0.0+unknown"
+
 __all__ = [
     "__version__",
     ### Core analysis flow ###
