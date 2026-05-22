@@ -160,7 +160,18 @@ def _release_asset_or_skip(asset_name: str, tmp_path_factory: pytest.TempPathFac
     """Download ``<asset_name>.jsonl`` from the configured release or skip.
 
     Skips the requesting test if the asset is missing or the download fails.
+    Setting ``MOOD_BENCH_FIXTURE_<ASSET_NAME_UPPER>`` to a local path bypasses the
+    download and uses that file directly (useful for running against alternative
+    score files).
     """
+    env_key = f"MOOD_BENCH_FIXTURE_{asset_name.upper()}"
+    override = os.environ.get(env_key)
+    if override:
+        path = Path(override).expanduser()
+        if not path.exists():
+            pytest.skip(f"Fixture override {env_key}={override} does not exist")
+        return path
+
     dest = tmp_path_factory.mktemp(f"release_{asset_name}") / f"{asset_name}.jsonl"
     try:
         ok = _download_release_asset(RELEASE_REPO, RELEASE_TAG, f"{asset_name}.jsonl", dest)
@@ -196,8 +207,8 @@ def mahalanobis_dataset(tmp_path_factory: pytest.TempPathFactory) -> Dataset:
 
 
 @pytest.fixture(scope="session")
-def it_vllm_dataset(tmp_path_factory: pytest.TempPathFactory) -> Dataset:
-    return _load_scored_dataset(_release_asset_or_skip("it_vllm", tmp_path_factory))
+def it_alignment_dataset(tmp_path_factory: pytest.TempPathFactory) -> Dataset:
+    return _load_scored_dataset(_release_asset_or_skip("it_alignment", tmp_path_factory))
 
 
 @pytest.fixture(scope="session")

@@ -13,7 +13,7 @@ def tpr_at_fpr(scores: np.ndarray, labels: np.ndarray, fpr: float = 0.01) -> flo
     unsafe = scores[..., labels]
 
     thresh = np.quantile(safe, 1.0 - fpr, axis=-1)
-    result = np.asarray((unsafe >= thresh[..., np.newaxis]).mean(axis=-1))
+    result = np.asarray((unsafe > thresh[..., np.newaxis]).mean(axis=-1))
 
     return float(result) if result.ndim == 0 else result
 

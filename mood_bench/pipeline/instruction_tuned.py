@@ -12,7 +12,6 @@ from mood_bench.pipeline.base import Pipeline, PipelineResult
 from mood_bench.tokenize import load_tokenizer
 
 if TYPE_CHECKING:
-    from peft import PeftConfig
     from transformers import PreTrainedTokenizerBase
     from vllm import LLM, SamplingParams
     from vllm.lora.request import LoRARequest
@@ -69,9 +68,9 @@ class InstructionTunedPipeline(Pipeline):
 
     def __init__(
         self,
-        model_name: str,
+        model_id: str,
         *,
-        is_lora_adapter: bool = True,
+        adapter_id: str | None = None,
         prompt_builder: PromptBuilder | None = None,
         grading_type: Literal["alignment", "uncertainty"] = "alignment",
         num_few_shot: int = 0,
@@ -89,8 +88,8 @@ class InstructionTunedPipeline(Pipeline):
         **model_kwargs: Any,
     ) -> None:
         ### Model kwargs ###
-        self._model_name = model_name
-        self._is_lora_adapter = is_lora_adapter
+        self._model_id = model_id
+        self._adapter_id = adapter_id
         self._max_new_tokens = max_new_tokens
         self._temperature = temperature
         self._gpu_memory_utilization = gpu_memory_utilization
@@ -183,48 +182,42 @@ class InstructionTunedPipeline(Pipeline):
         from vllm import LLM, SamplingParams
 
         ### Configure variables ###
+        has_adapter = self._adapter_id is not None
         tp = self._tensor_parallel_size
-        lora_config: PeftConfig | None = None
         if tp is None:
             tp = torch.cuda.device_count()
             logger.info(f"vLLM: auto-detected {tp} GPU(s)")
-        if self._is_lora_adapter:
-            from peft import PeftConfig
-
-            lora_config = PeftConfig.from_pretrained(self._model_name)
 
         ### Load vLLM model ###
-        model_name = (
-            self._model_name if not self._is_lora_adapter else lora_config.base_model_name_or_path
-        )
-        max_lora_rank = self._max_lora_rank if self._is_lora_adapter else None
-
+        max_lora_rank = self._max_lora_rank if has_adapter else None
         vllm_kwargs = dict(self._model_kwargs)
         if "torch_dtype" in vllm_kwargs:
             vllm_kwargs["dtype"] = str(vllm_kwargs.pop("torch_dtype")).replace("torch.", "")
 
         self._llm = LLM(
-            model=model_name,
+            model=self._model_id,
             tensor_parallel_size=tp,
             gpu_memory_utilization=self._gpu_memory_utilization,
-            enable_lora=self._is_lora_adapter,
+            enable_lora=has_adapter,
             max_lora_rank=max_lora_rank,
             enforce_eager=self._enforce_eager,
             **vllm_kwargs,
         )
 
         ### (Optionally) load LoRA adapter ###
-        if self._is_lora_adapter:
+        if has_adapter:
             from vllm.lora.request import LoRARequest
 
             self._lora_request = LoRARequest(
                 lora_name="adapter",
                 lora_int_id=1,
-                lora_path=self._model_name,
+                lora_path=self._adapter_id,
             )
 
         ### Load tokenizer and sampling parameters ###
-        self.tokenizer = load_tokenizer(self._model_name)
+        self.tokenizer = load_tokenizer(self._adapter_id or self._model_id)
+        if self.tokenizer.chat_template is None:
+            self.tokenizer = load_tokenizer(self._model_id)
         if self.tokenizer.chat_template is None:
             self.tokenizer.chat_template = read_prompt_file("default_chat_template.jinja")
 
@@ -242,30 +235,19 @@ class InstructionTunedPipeline(Pipeline):
         from transformers import AutoModelForCausalLM
 
         device = "cuda" if torch.cuda.is_available() else "cpu"
+        hf_kwargs = {k: v for k, v in self._model_kwargs.items() if k not in self._VLLM_ONLY_KEYS}
 
-        if self._is_lora_adapter:
-            from peft import PeftConfig, PeftModel
+        ### Load model and (optionally) apply LoRA adapter ###
+        model = AutoModelForCausalLM.from_pretrained(self._model_id, **hf_kwargs)
+        if self._adapter_id is not None:
+            from peft import PeftModel
 
-            ### Load model and apply LoRA adapter ###
-            lora_config = PeftConfig.from_pretrained(self._model_name)
-            base_model_name = lora_config.base_model_name_or_path
-            model = AutoModelForCausalLM.from_pretrained(
-                base_model_name,
-                **{k: v for k, v in self._model_kwargs.items() if k not in self._VLLM_ONLY_KEYS},
-            )
-            model = PeftModel.from_pretrained(model, self._model_name)
-        else:
-            ### Load model ###
-            base_model_name = self._model_name
-            model = AutoModelForCausalLM.from_pretrained(
-                base_model_name,
-                **{k: v for k, v in self._model_kwargs.items() if k not in self._VLLM_ONLY_KEYS},
-            )
+            model = PeftModel.from_pretrained(model, self._adapter_id)
 
         ### Do additional configuration on model ###
-        self.tokenizer = load_tokenizer(self._model_name)
+        self.tokenizer = load_tokenizer(self._adapter_id or self._model_id)
         if self.tokenizer.chat_template is None:
-            self.tokenizer = load_tokenizer(base_model_name)
+            self.tokenizer = load_tokenizer(self._model_id)
         if self.tokenizer.chat_template is None:
             self.tokenizer.chat_template = read_prompt_file("default_chat_template.jinja")
         if getattr(model.config, "pad_token_id", None) is None:

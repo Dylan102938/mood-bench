@@ -73,20 +73,12 @@ def run(args: argparse.Namespace) -> None:
     from mood_bench.core import mood_bench
     from mood_bench.pipeline.instruction_tuned import InstructionTunedPipeline
 
-    ### Define defaults ###
-    if args.adapter_id is not None:
-        model_name = args.adapter_id
-        is_lora_adapter = True
-    else:
-        model_name = args.model_id
-        is_lora_adapter = False
-
     ### Run mood_bench ###
     domains = parse_domains(args.domains)
     _, report = mood_bench(
         pipelines=InstructionTunedPipeline(
-            model_name,
-            is_lora_adapter=is_lora_adapter,
+            args.model_id,
+            adapter_id=args.adapter_id,
             grading_type=args.grading_type,
             num_few_shot=args.num_few_shot,
             icl_malign_examples=None,

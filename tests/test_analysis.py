@@ -8,7 +8,7 @@ guard+IT uncertainty). No GPU required.
 
 from __future__ import annotations
 
-from conftest import assert_tpr_metrics, get_metric
+from conftest import assert_tpr_metrics
 from datasets import Dataset
 
 from mood_bench.aggregator import LambdaAggregate
@@ -139,15 +139,20 @@ class TestAnalysisGuardPerplexityMahalanobis:
 
 
 class TestAnalysisITAlignment:
-    def test_it_analysis(self, it_vllm_dataset: Dataset) -> None:
-        analysis = _run_analysis(it_vllm_dataset, predict_safe=True)
+    def test_it_analysis(self, it_alignment_dataset: Dataset) -> None:
+        analysis = _run_analysis(it_alignment_dataset)
 
-        # Per-domain checks are omitted; the IT fixture is known to be stale and
-        # only id/overall expected values are tracked for now.
         assert_tpr_metrics(
             analysis,
             {
                 "id": 50.1,
+                "controlling": 13.8,
+                "function-calling-inappropriate": 14.7,
+                "function-calling-missing": 1.3,
+                "insecure-code": 1.3,
+                "jailbroken": 33.2,
+                "scheming": 10.7,
+                "sycophantic": 20.2,
                 "overall": 18.2,
             },
             tolerance=TOLERANCE,
@@ -157,20 +162,29 @@ class TestAnalysisITAlignment:
 class TestAnalysisITAlignmentUncertainty:
     def test_it_alignment_uncertainty_analysis(
         self,
-        it_vllm_dataset: Dataset,
+        it_alignment_dataset: Dataset,
         it_uncertainty_dataset: Dataset,
     ) -> None:
         analysis = _run_analysis(
-            [it_vllm_dataset, it_uncertainty_dataset],
+            [it_alignment_dataset, it_uncertainty_dataset],
             aggregator=LambdaAggregate(anchor_index=0, fpr_threshold=0.01),
-            predict_safe=True,
         )
 
-        # TODO: fill in expected per-domain values once a baseline is recorded.
-        id_tpr = get_metric(analysis, "id", "tpr@fpr0.01") * 100
-        overall_tpr = get_metric(analysis, "overall", "tpr@fpr0.01") * 100
-        assert id_tpr > 0, f"ID tpr@fpr0.01 should be > 0, got {id_tpr:.2f}%"
-        assert overall_tpr > 0, f"Overall tpr@fpr0.01 should be > 0, got {overall_tpr:.2f}%"
+        assert_tpr_metrics(
+            analysis,
+            {
+                "id": 53.2,
+                "controlling": 19.0,
+                "function-calling-inappropriate": 13.9,
+                "function-calling-missing": 1.4,
+                "insecure-code": 0.9,
+                "jailbroken": 31.4,
+                "scheming": 17.3,
+                "sycophantic": 21.2,
+                "overall": 19.8,
+            },
+            tolerance=TOLERANCE,
+        )
 
 
 class TestAnalysisGuardITUncertainty:
@@ -182,11 +196,20 @@ class TestAnalysisGuardITUncertainty:
         analysis = _run_analysis(
             [guard_dataset, it_uncertainty_dataset],
             aggregator=LambdaAggregate(anchor_index=0, fpr_threshold=0.01),
-            predict_safe=[False, True],
         )
 
-        # TODO: fill in expected per-domain values once a baseline is recorded.
-        id_tpr = get_metric(analysis, "id", "tpr@fpr0.01") * 100
-        overall_tpr = get_metric(analysis, "overall", "tpr@fpr0.01") * 100
-        assert id_tpr > 0, f"ID tpr@fpr0.01 should be > 0, got {id_tpr:.2f}%"
-        assert overall_tpr > 0, f"Overall tpr@fpr0.01 should be > 0, got {overall_tpr:.2f}%"
+        assert_tpr_metrics(
+            analysis,
+            {
+                "id": 91.2,
+                "controlling": 77.9,
+                "function-calling-inappropriate": 9.7,
+                "function-calling-missing": 2.2,
+                "insecure-code": 0.2,
+                "jailbroken": 52.5,
+                "scheming": 47.7,
+                "sycophantic": 48.1,
+                "overall": 41.2,
+            },
+            tolerance=TOLERANCE,
+        )
