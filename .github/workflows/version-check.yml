@@ -64,11 +64,15 @@ jobs:
                   stderr=subprocess.DEVNULL,
               )
           except subprocess.CalledProcessError:
-              sys.exit(f"Could not read pyproject.toml at base {base_ref}@{base_sha[:8]}")
+              print(
+                  f"No pyproject.toml on base {base_ref}@{base_sha[:8]}; "
+                  f"treating {new_version} as first publish."
+              )
+              sys.exit(0)
 
           base_version_str = read_version(base_blob)
           if not base_version_str:
-              print("Base branch has no version; allowing.")
+              print("Base branch has no [project].version; allowing.")
               sys.exit(0)
           try:
               base_version = Version(base_version_str)
