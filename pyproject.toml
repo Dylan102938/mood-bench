@@ -1,6 +1,6 @@
 [project]
 name = "mood-bench"
-version = "0.0.1"
+version = "0.0.2"
 description = "Mood-Bench: a multi-domain out-of-distribution safety benchmark for LLMs."
 readme = "README.md"
 requires-python = ">=3.12"
