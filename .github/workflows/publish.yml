@@ -1,0 +1,121 @@
+name: Publish to PyPI
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify-version-bump:
+    name: Verify version was bumped
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.check.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Need at least HEAD and HEAD~1 to compare versions.
+          fetch-depth: 2
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install version-check dependencies
+        run: python -m pip install --upgrade packaging
+
+      - name: Verify pyproject.toml version was bumped vs previous commit
+        id: check
+        shell: bash
+        run: |
+          python <<'PY'
+          import os
+          import subprocess
+          import sys
+          import tomllib
+          from packaging.version import InvalidVersion, Version
+
+          def read_version(blob: bytes) -> str | None:
+              data = tomllib.loads(blob.decode())
+              return data.get("project", {}).get("version")
+
+          with open("pyproject.toml", "rb") as f:
+              new_version_str = read_version(f.read())
+          if not new_version_str:
+              sys.exit("pyproject.toml is missing [project].version")
+
+          try:
+              new_version = Version(new_version_str)
+          except InvalidVersion as e:
+              sys.exit(f"Invalid new version {new_version_str!r}: {e}")
+
+          try:
+              prev_blob = subprocess.check_output(
+                  ["git", "show", "HEAD~1:pyproject.toml"],
+                  stderr=subprocess.DEVNULL,
+              )
+          except subprocess.CalledProcessError:
+              print(f"No previous pyproject.toml found; treating {new_version} as first publish.")
+              prev_version = None
+          else:
+              prev_version_str = read_version(prev_blob)
+              if not prev_version_str:
+                  print("Previous pyproject.toml had no version; allowing publish.")
+                  prev_version = None
+              else:
+                  try:
+                      prev_version = Version(prev_version_str)
+                  except InvalidVersion as e:
+                      sys.exit(f"Invalid previous version {prev_version_str!r}: {e}")
+
+          if prev_version is not None and new_version <= prev_version:
+              sys.exit(
+                  f"::error::Version was not bumped: {prev_version} -> {new_version}. "
+                  "Update pyproject.toml [project].version before pushing to main."
+              )
+
+          print(f"Version check OK: {prev_version} -> {new_version}")
+          with open(os.environ["GITHUB_OUTPUT"], "a") as out:
+              out.write(f"version={new_version}\n")
+          PY
+
+  build-and-publish:
+    name: Build and publish to PyPI
+    needs: verify-version-bump
+    runs-on: ubuntu-latest
+
+    # Required for PyPI trusted publishing (OIDC).
+    permissions:
+      id-token: write
+      contents: read
+
+    # Tie publishes to a GitHub "pypi" environment so you can add
+    # required reviewers / protection rules later.
+    environment:
+      name: pypi
+      url: https://pypi.org/project/mood-bench/${{ needs.verify-version-bump.outputs.version }}/
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install build tooling
+        run: python -m pip install --upgrade build
+
+      - name: Build sdist and wheel
+        run: python -m build
+
+      - name: Inspect built artifacts
+        run: ls -la dist/
+
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        # No `with:` block needed when using trusted publishing.
+        # PyPI rejects re-uploads of the same version, so this also
+        # acts as a second line of defense against accidental republish.
