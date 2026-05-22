@@ -5,11 +5,10 @@ from pathlib import Path
 import pytest
 import torch as t
 from conftest import assert_tpr_metrics
-from huggingface_hub import hf_hub_download
 from peft import PeftModel
-from safetensors import safe_open
 from transformers import AutoModelForSequenceClassification
 
+from mood_bench.cli._common import infer_adapter_num_labels
 from mood_bench.core import mood_bench
 from mood_bench.pipeline.mahalanobis import MahalanobisPipeline, get_stats_for_model
 from mood_bench.tokenize import load_tokenizer
@@ -19,19 +18,10 @@ POOLING = "cls"
 TOLERANCE = 2.0
 
 
-def _infer_num_labels(adapter_id: str) -> int | None:
-    path = hf_hub_download(repo_id=adapter_id, filename="adapter_model.safetensors")
-    with safe_open(path, framework="pt") as f:
-        for key in f.keys():
-            if key.endswith("score.weight") or key.endswith("classifier.weight"):
-                return int(f.get_tensor(key).shape[0])
-    return None
-
-
 @pytest.mark.gpu
 def test_mahalanobis_pipeline(gpu: list[int], results_dir: Path) -> None:
     device = t.device("cuda" if t.cuda.is_available() else "cpu")
-    num_labels = _infer_num_labels(ADAPTER_ID)
+    num_labels = infer_adapter_num_labels(ADAPTER_ID)
     tokenizer = load_tokenizer(ADAPTER_ID)
     load_kwargs: dict[str, object] = {"dtype": t.bfloat16}
     if num_labels is not None:
@@ -44,7 +34,7 @@ def test_mahalanobis_pipeline(gpu: list[int], results_dir: Path) -> None:
     if getattr(model.config, "pad_token_id", None) is None:
         model.config.pad_token_id = tokenizer.pad_token_id
 
-    model = PeftModel.from_pretrained(model, ADAPTER_ID)
+    model = PeftModel.from_pretrained(model, ADAPTER_ID).merge_and_unload()
     model = model.to(device)
     model.eval()
 
@@ -59,8 +49,8 @@ def test_mahalanobis_pipeline(gpu: list[int], results_dir: Path) -> None:
         pipelines=MahalanobisPipeline(
             model,
             tokenizer,
-            mean=stats["mean"].to(device=device, dtype=t.float64),
-            inv_cov=stats["inv_cov"].to(device=device, dtype=t.float64),
+            mean=stats["mean"].to(device=device, dtype=t.bfloat16),
+            inv_cov=stats["inv_cov"].to(device=device, dtype=t.bfloat16),
             pooling_strategy=POOLING,
         ),
         eval_batch_size=4,

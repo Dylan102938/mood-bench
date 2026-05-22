@@ -172,7 +172,7 @@ def mood_bench(
     eval_batch_size: int = 16,
     output_dir: str | None = "./results/",
     use_mini: bool = False,
-    in_distr_domains: Iterable[EvalDataset] | None = tuple(DEFAULT_IN_DISTR_DOMAINS),
+    in_distr_domains: Iterable[EvalDataset] = tuple(DEFAULT_IN_DISTR_DOMAINS),
     max_length: int | None = None,
     max_length_tokenizer: str | None = None,
     include_figures: bool = True,

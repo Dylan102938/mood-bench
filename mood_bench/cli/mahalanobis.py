@@ -26,7 +26,6 @@ def build_parser(subparsers: argparse._SubParsersAction) -> None:
         "--num_labels",
         type=int,
         default=None,
-        help="Classification head size when --model-type=cls.",
     )
     parser.add_argument("--pooling", choices=POOLING_CHOICES, default="cls")
     parser.add_argument(
@@ -126,7 +125,7 @@ def run(args: argparse.Namespace) -> None:
     if getattr(model.config, "pad_token_id", None) is None:
         model.config.pad_token_id = tokenizer.pad_token_id
     if args.adapter_id is not None:
-        model = PeftModel.from_pretrained(model, args.adapter_id)
+        model = PeftModel.from_pretrained(model, args.adapter_id).merge_and_unload()
     if args.device_map is None:
         model = model.to(device)
 
@@ -170,8 +169,8 @@ def run(args: argparse.Namespace) -> None:
         pipelines=MahalanobisPipeline(
             model,
             tokenizer,
-            mean=stats["mean"].to(device=device, dtype=t.float64),
-            inv_cov=stats["inv_cov"].to(device=device, dtype=t.float64),
+            mean=stats["mean"].to(device=device, dtype=t.bfloat16),
+            inv_cov=stats["inv_cov"].to(device=device, dtype=t.bfloat16),
             pooling_strategy=args.pooling,
         ),
         domains=domains,
@@ -180,7 +179,6 @@ def run(args: argparse.Namespace) -> None:
         use_mini=args.use_mini,
         max_length=args.max_length,
         include_figures=not args.no_figures,
-        predict_safe=False,
     )
 
     print_report_table(report, title=f"Mahalanobis · {args.adapter_id or args.model_id}")

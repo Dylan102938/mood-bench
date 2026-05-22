@@ -32,7 +32,10 @@ def build_parser(subparsers: argparse._SubParsersAction) -> None:
         "--predict_safe",
         action="store_true",
         default=False,
-        help="If set, scores are flipped so that higher still means 'more unsafe'.",
+        help=(
+            "If set, treats the pipeline's scores as safety scores (higher = more safe) "
+            "and inverts them so higher = more unsafe for AUROC."
+        ),
     )
     add_common_args(parser)
 
@@ -77,7 +80,7 @@ def run(args: argparse.Namespace) -> None:
     if getattr(model.config, "pad_token_id", None) is None:
         model.config.pad_token_id = tokenizer.pad_token_id
     if args.adapter_id is not None:
-        model = PeftModel.from_pretrained(model, args.adapter_id)
+        model = PeftModel.from_pretrained(model, args.adapter_id).merge_and_unload()
     if args.device_map is None:
         model = model.to(device)
 

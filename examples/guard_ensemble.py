@@ -5,9 +5,7 @@ import gc
 from typing import Iterable
 
 import torch as t
-from huggingface_hub import hf_hub_download
 from peft import PeftModel
-from safetensors import safe_open
 from transformers import AutoModelForSequenceClassification
 
 from mood_bench import (
@@ -18,30 +16,31 @@ from mood_bench import (
     load_tokenizer,
     mood_bench,
 )
+from mood_bench.cli._common import infer_adapter_num_labels
+
+MODEL_ID = "google/gemma-2-9b"
+ADAPTER_IDS: tuple[str, ...] = (
+    "mood-bench/gemma-2-9b-guard-ensemble-p0",
+    "mood-bench/gemma-2-9b-guard-ensemble-p1",
+    "mood-bench/gemma-2-9b-guard-ensemble-p2",
+    "mood-bench/gemma-2-9b-guard-ensemble-p3",
+    "mood-bench/gemma-2-9b-guard-ensemble-p4",
+)
 
 
-def _infer_num_labels(adapter_id: str) -> int | None:
-    path = hf_hub_download(repo_id=adapter_id, filename="adapter_model.safetensors")
-    with safe_open(path, framework="pt") as f:
-        for key in f.keys():
-            if key.endswith("score.weight") or key.endswith("classifier.weight"):
-                return int(f.get_tensor(key).shape[0])
-    return None
-
-
-def guard_pipeline(adapter_id: str, device: str) -> Pipeline:
+def guard_pipeline(model_id: str, adapter_id: str, device: str) -> Pipeline:
     def run(samples: list[str], **kwargs) -> PipelineResult:
         tokenizer = load_tokenizer(adapter_id)
-        num_labels = _infer_num_labels(adapter_id)
+        num_labels = infer_adapter_num_labels(adapter_id)
         base_model = AutoModelForSequenceClassification.from_pretrained(
-            tokenizer.name_or_path,
+            model_id,
             dtype=t.bfloat16,
             **({"num_labels": num_labels} if num_labels is not None else {}),
         )
         if base_model.config.pad_token_id is None:
             base_model.config.pad_token_id = tokenizer.pad_token_id
 
-        model = PeftModel.from_pretrained(base_model, adapter_id)
+        model = PeftModel.from_pretrained(base_model, adapter_id).merge_and_unload()
         model = model.to(device)
         model.eval()
 
@@ -67,21 +66,15 @@ def main() -> None:
     args = parser.parse_args()
 
     device = "cuda" if t.cuda.is_available() else "cpu"
-    adapter_ids: Iterable[str] = (
-        "mood-bench/gemma-2-9b-guard-ensemble-p0",
-        "mood-bench/gemma-2-9b-guard-ensemble-p1",
-        "mood-bench/gemma-2-9b-guard-ensemble-p2",
-        "mood-bench/gemma-2-9b-guard-ensemble-p3",
-        "mood-bench/gemma-2-9b-guard-ensemble-p4",
-    )
+    adapter_ids: Iterable[str] = ADAPTER_IDS
 
     mood_bench(
-        pipelines=[guard_pipeline(adapter_id, device) for adapter_id in adapter_ids],
+        pipelines=[guard_pipeline(MODEL_ID, adapter_id, device) for adapter_id in adapter_ids],
         aggregator=MinAggregate(),
         output_dir=args.output_dir,
         eval_batch_size=8,
         max_length=2048,
-        predict_safe=False,
+        predict_safe=True,
     )
 
 

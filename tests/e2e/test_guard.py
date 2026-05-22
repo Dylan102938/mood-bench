@@ -5,31 +5,20 @@ from pathlib import Path
 import pytest
 import torch as t
 from conftest import assert_tpr_metrics
-from huggingface_hub import hf_hub_download
 from peft import PeftModel
-from safetensors import safe_open
 from transformers import AutoModelForSequenceClassification
 
 from mood_bench import GuardModelPipeline, load_tokenizer, mood_bench
+from mood_bench.cli._common import infer_adapter_num_labels
 
 MODEL_ID = "mood-bench/gemma-2-9b-guard"
 TOLERANCE = 0.5
 
 
-def _infer_num_labels(adapter_id: str) -> int | None:
-    path = hf_hub_download(repo_id=adapter_id, filename="adapter_model.safetensors")
-    with safe_open(path, framework="pt") as f:
-        for key in f.keys():
-            if key.endswith("score.weight") or key.endswith("classifier.weight"):
-                return int(f.get_tensor(key).shape[0])
-
-    return None
-
-
 @pytest.mark.gpu
 def test_guard_pipeline(gpu: list[int], results_dir: Path) -> None:
     tokenizer = load_tokenizer(MODEL_ID)
-    num_labels = _infer_num_labels(MODEL_ID)
+    num_labels = infer_adapter_num_labels(MODEL_ID)
     base_model = AutoModelForSequenceClassification.from_pretrained(
         tokenizer.name_or_path,
         dtype=t.bfloat16,
@@ -39,7 +28,7 @@ def test_guard_pipeline(gpu: list[int], results_dir: Path) -> None:
         base_model.config.pad_token_id = tokenizer.pad_token_id
 
     device = "cuda" if t.cuda.is_available() else "cpu"
-    model = PeftModel.from_pretrained(base_model, MODEL_ID)
+    model = PeftModel.from_pretrained(base_model, MODEL_ID).merge_and_unload()
     model = model.to(device)
     model.eval()
 

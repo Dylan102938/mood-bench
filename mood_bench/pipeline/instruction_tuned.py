@@ -9,7 +9,7 @@ import numpy as np
 import mood_bench._output as logger
 from mood_bench._prompts import read_prompt_file, render_prompt
 from mood_bench.pipeline.base import Pipeline, PipelineResult
-from mood_bench.tokenize import load_tokenizer
+from mood_bench.tokenize import load_tokenizer, rendered
 
 if TYPE_CHECKING:
     from transformers import PreTrainedTokenizerBase
@@ -133,6 +133,7 @@ class InstructionTunedPipeline(Pipeline):
             self._loaded = True
 
         ### Render prompts and create output slots ###
+        batch_size = kwargs.get("batch_size", 1)
         prompts = [self._render_prompt(s) for s in samples]
         scores = np.full(len(samples), np.nan, dtype=float)
         reasonings: list[str] = [""] * len(samples)
@@ -152,7 +153,7 @@ class InstructionTunedPipeline(Pipeline):
             if self._backend == "vllm":
                 texts = self._generate_vllm(pending_prompts)
             else:
-                texts = self._generate_hf(pending_prompts)
+                texts = self._generate_hf(pending_prompts, batch_size=batch_size)
 
             ### Parse outputs ###
             still_pending: list[int] = []
@@ -192,7 +193,9 @@ class InstructionTunedPipeline(Pipeline):
         max_lora_rank = self._max_lora_rank if has_adapter else None
         vllm_kwargs = dict(self._model_kwargs)
         if "torch_dtype" in vllm_kwargs:
-            vllm_kwargs["dtype"] = str(vllm_kwargs.pop("torch_dtype")).replace("torch.", "")
+            vllm_kwargs["dtype"] = vllm_kwargs.pop("torch_dtype")
+        if "dtype" in vllm_kwargs and not isinstance(vllm_kwargs["dtype"], str):
+            vllm_kwargs["dtype"] = str(vllm_kwargs["dtype"]).replace("torch.", "")
 
         self._llm = LLM(
             model=self._model_id,
@@ -242,7 +245,7 @@ class InstructionTunedPipeline(Pipeline):
         if self._adapter_id is not None:
             from peft import PeftModel
 
-            model = PeftModel.from_pretrained(model, self._adapter_id)
+            model = PeftModel.from_pretrained(model, self._adapter_id).merge_and_unload()
 
         ### Do additional configuration on model ###
         self.tokenizer = load_tokenizer(self._adapter_id or self._model_id)
@@ -266,28 +269,33 @@ class InstructionTunedPipeline(Pipeline):
         outputs = self._llm.generate(prompts, self._sampling_params, **lora_kwargs)
         return [o.outputs[0].text for o in outputs]
 
-    def _generate_hf(self, prompts: list[str]) -> list[str]:
+    def _generate_hf(self, prompts: list[str], *, batch_size: int = 1) -> list[str]:
         import torch
 
         model = self._hf_model
+        gen_kwargs: dict[str, Any] = {
+            "max_new_tokens": self._max_new_tokens,
+            "do_sample": self._temperature > 0,
+        }
+        if self._temperature > 0:
+            gen_kwargs["temperature"] = self._temperature
+
         results: list[str] = []
-
-        for prompt in prompts:
-            inputs = self.tokenizer(prompt, return_tensors="pt").to(model.device)
-            input_len = inputs["input_ids"].shape[-1]
-
-            gen_kwargs: dict[str, Any] = {
-                "max_new_tokens": self._max_new_tokens,
-                "do_sample": self._temperature > 0,
-            }
-            if self._temperature > 0:
-                gen_kwargs["temperature"] = self._temperature
-
+        for batch in rendered(
+            prompts,
+            renderer=self.tokenizer,
+            device=model.device,
+            batch_size=batch_size,
+            padding=True,
+            truncation=True,
+            return_tensors="pt",
+        ):
+            input_len = batch["input_ids"].shape[-1]
             with torch.inference_mode():
-                output_ids = model.generate(**inputs, **gen_kwargs)
+                output_ids = model.generate(**batch, **gen_kwargs)
 
-            new_tokens = output_ids[0, input_len:]
-            results.append(self.tokenizer.decode(new_tokens, skip_special_tokens=True))
+            new_tokens = output_ids[:, input_len:]
+            results.extend(self.tokenizer.batch_decode(new_tokens, skip_special_tokens=True))
 
         return results
 

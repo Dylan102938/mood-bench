@@ -4,9 +4,7 @@ import argparse
 import gc
 
 import torch as t
-from huggingface_hub import hf_hub_download
 from peft import PeftModel
-from safetensors import safe_open
 from transformers import AutoModelForCausalLM, AutoModelForSequenceClassification
 
 from mood_bench import (
@@ -18,30 +16,26 @@ from mood_bench import (
     load_tokenizer,
     mood_bench,
 )
+from mood_bench.cli._common import infer_adapter_num_labels
 
-
-def _infer_num_labels(adapter_id: str) -> int | None:
-    path = hf_hub_download(repo_id=adapter_id, filename="adapter_model.safetensors")
-    with safe_open(path, framework="pt") as f:
-        for key in f.keys():
-            if key.endswith("score.weight") or key.endswith("classifier.weight"):
-                return int(f.get_tensor(key).shape[0])
-    return None
+MODEL_ID = "google/gemma-2-2b"
+GUARD_ADAPTER_ID = "mood-bench/gemma-2-2b-guard"
+PERPLEXITY_ADAPTER_ID = "mood-bench/gemma-2-2b-causal-lm"
 
 
 def guard_pipeline(device: str) -> Pipeline:
     def run(samples: list[str], **kwargs) -> PipelineResult:
-        tokenizer = load_tokenizer("mood-bench/gemma-2-2b-guard")
-        num_labels = _infer_num_labels("mood-bench/gemma-2-2b-guard")
+        tokenizer = load_tokenizer(GUARD_ADAPTER_ID)
+        num_labels = infer_adapter_num_labels(GUARD_ADAPTER_ID)
         base_model = AutoModelForSequenceClassification.from_pretrained(
-            tokenizer.name_or_path,
+            MODEL_ID,
             dtype=t.bfloat16,
             **({"num_labels": num_labels} if num_labels is not None else {}),
         )
         if base_model.config.pad_token_id is None:
             base_model.config.pad_token_id = tokenizer.pad_token_id
 
-        model = PeftModel.from_pretrained(base_model, "mood-bench/gemma-2-2b-guard")
+        model = PeftModel.from_pretrained(base_model, GUARD_ADAPTER_ID).merge_and_unload()
         model = model.to(device)
         model.eval()
 
@@ -60,12 +54,12 @@ def guard_pipeline(device: str) -> Pipeline:
 
 def perplexity_pipeline(device: str) -> Pipeline:
     def run(samples: list[str], **kwargs) -> PipelineResult:
-        tokenizer = load_tokenizer("mood-bench/gemma-2-2b-causal-lm")
-        base_model = AutoModelForCausalLM.from_pretrained(tokenizer.name_or_path, dtype=t.bfloat16)
+        tokenizer = load_tokenizer(PERPLEXITY_ADAPTER_ID)
+        base_model = AutoModelForCausalLM.from_pretrained(MODEL_ID, dtype=t.bfloat16)
         if base_model.config.pad_token_id is None:
             base_model.config.pad_token_id = tokenizer.pad_token_id
 
-        model = PeftModel.from_pretrained(base_model, "mood-bench/gemma-2-2b-causal-lm")
+        model = PeftModel.from_pretrained(base_model, PERPLEXITY_ADAPTER_ID).merge_and_unload()
         model = model.to(device)
         model.eval()
 

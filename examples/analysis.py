@@ -7,7 +7,6 @@ from datasets import Dataset, load_dataset
 
 from mood_bench import (
     DEFAULT_IN_DISTR_DOMAINS,
-    Aggregator,
     EvalDataset,
     LambdaAggregate,
     MeanAggregate,
@@ -15,11 +14,7 @@ from mood_bench import (
     mood_bench_analysis,
 )
 
-AGGREGATORS: dict[str, Aggregator] = {
-    "min": MinAggregate(),
-    "mean": MeanAggregate(),
-    "lambda": LambdaAggregate(),
-}
+AGGREGATOR_NAMES: tuple[str, ...] = ("lambda", "mean", "min")
 
 
 def load_scored_jsonl(path: Path) -> Dataset:
@@ -70,7 +65,7 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--aggregator",
-        choices=sorted(AGGREGATORS),
+        choices=sorted(AGGREGATOR_NAMES),
         default=None,
         help="How to combine multiple scored runs. Required when more than one file is passed.",
     )
@@ -103,9 +98,8 @@ def parse_args() -> argparse.Namespace:
         "--predict_safe",
         action="store_true",
         help=(
-            "Treat input 'score' columns as safety scores (higher = more safe). "
-            "They are negated inside mood_bench_analysis so all written artifacts "
-            "use the canonical higher = more malign convention."
+            "If set, treats input 'score' columns as safety scores (higher = more safe) "
+            "and inverts them so higher = more unsafe for AUROC."
         ),
     )
 

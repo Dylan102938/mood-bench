@@ -34,7 +34,7 @@ def _make_pipeline(
         max_retries=3,
         tensor_parallel_size=1,
         gpu_memory_utilization=0.7,
-        torch_dtype=t.bfloat16,
+        dtype=t.bfloat16,
         enforce_eager=True,
     )
 

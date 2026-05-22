@@ -2,12 +2,8 @@ from __future__ import annotations
 
 import argparse
 from pathlib import Path
-from typing import TYPE_CHECKING
 
-if TYPE_CHECKING:
-    from mood_bench.aggregator import Aggregator
-
-AGGREGATOR_NAMES: dict[str, Aggregator] = ("lambda", "mean", "min")
+AGGREGATOR_NAMES: tuple[str, ...] = ("lambda", "mean", "min")
 
 
 def build_parser(subparsers: argparse._SubParsersAction) -> None:
@@ -59,7 +55,10 @@ def build_parser(subparsers: argparse._SubParsersAction) -> None:
         "--predict-safe",
         "--predict_safe",
         action="store_true",
-        help="Treat input 'score' columns as safety scores (higher = more safe).",
+        help=(
+            "If set, treats input 'score' columns as safety scores (higher = more safe) "
+            "and inverts them so higher = more unsafe for AUROC."
+        ),
     )
     parser.add_argument(
         "-v",
@@ -120,7 +119,7 @@ def _verify_and_load_dataset(path: Path):  # -> Dataset
 
     ds = load_dataset("json", data_files=str(path), split="train")
 
-    if "malign" not in ds.column_names and "safe" not in ds.column_names:
+    if "malign" not in ds.column_names:
         if "safe" not in ds.column_names:
             raise ValueError(
                 f"{path} is missing both 'malign' and 'safe' columns; "

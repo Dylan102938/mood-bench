@@ -24,7 +24,7 @@ def test_perplexity_pipeline(gpu: list[int], results_dir: Path) -> None:
     if getattr(model.config, "pad_token_id", None) is None:
         model.config.pad_token_id = tokenizer.pad_token_id
 
-    model = PeftModel.from_pretrained(model, ADAPTER_ID)
+    model = PeftModel.from_pretrained(model, ADAPTER_ID).merge_and_unload()
     model = model.to(device)
     model.eval()
 

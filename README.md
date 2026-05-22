@@ -88,7 +88,7 @@ uv run pytest tests/e2e/ -m gpu
 
 The `mood` CLI exposes one subcommand per built-in pipeline under `mood bench` and a separate `mood analyze` for post-hoc analysis.
 
-**Guard model** — a sequence-classification model with a binary safe/unsafe head, optionally with a LoRA adapter:
+**Guard model** — a sequence-classification model with a binary safe/unsafe head, optionally with a LoRA adapter. The mood-bench-released guard adapters output a *safety* score (higher = more safe), so pass `--predict-safe` to invert it for AUROC:
 
 ```bash
 mood bench guard \
@@ -96,7 +96,8 @@ mood bench guard \
     --adapter-id mood-bench/gemma-2-2b-guard \
     --output-dir results/gemma-2-2b-guard \
     --batch-size 8 \
-    --max-length 2048
+    --max-length 2048 \
+    --predict-safe
 ```
 
 **Perplexity** — token-level negative log-likelihood under a causal LM, with optional LoRA adapter merged on top:
@@ -187,6 +188,7 @@ results, report = mood_bench(
     output_dir="results/my-guard",
     eval_batch_size=8,
     max_length=2048,
+    predict_safe=True,
 )
 print(report["groups"]["overall"])
 ```

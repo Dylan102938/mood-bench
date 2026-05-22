@@ -77,14 +77,14 @@ def get_stats_for_model(
 
             features_list.append(pooled_features)
 
-    features = t.cat(features_list, dim=0).to(t.float64)
+    features = t.cat(features_list, dim=0).to(t.bfloat16)
     mean = features.mean(dim=0)
     centered = features - mean
 
     eps = 1e-6
     cov = (centered.T @ centered) / (centered.size(0) - 1)
-    cov += t.eye(cov.size(0), device=cov.device) * eps
-    inv_cov = t.linalg.pinv(cov)
+    cov += t.eye(cov.size(0), device=cov.device, dtype=cov.dtype) * eps
+    inv_cov = t.linalg.pinv(cov.float()).to(t.bfloat16)
 
     dists_sq = t.sum((centered @ inv_cov) * centered, dim=1)
     calibration_var = dists_sq.var(unbiased=False)
