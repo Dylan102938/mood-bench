@@ -114,6 +114,23 @@ jobs:
       - name: Inspect built artifacts
         run: ls -la dist/
 
+      - name: Verify mood_bench.__version__ matches pyproject.toml
+        env:
+          EXPECTED_VERSION: ${{ needs.verify-version-bump.outputs.version }}
+        run: |
+          python -m pip install --upgrade pip
+          # Install the freshly-built wheel into an isolated location and confirm
+          # the package's runtime __version__ matches the declared metadata.
+          # This catches drift between hardcoded version strings and pyproject.toml.
+          python -m venv /tmp/verify-venv
+          /tmp/verify-venv/bin/pip install --quiet dist/*.whl
+          ACTUAL_VERSION=$(/tmp/verify-venv/bin/python -c "import mood_bench; print(mood_bench.__version__)")
+          echo "expected=$EXPECTED_VERSION  actual=$ACTUAL_VERSION"
+          if [ "$ACTUAL_VERSION" != "$EXPECTED_VERSION" ]; then
+            echo "::error::mood_bench.__version__ ($ACTUAL_VERSION) does not match pyproject.toml ($EXPECTED_VERSION)"
+            exit 1
+          fi
+
       - name: Publish to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1
         # No `with:` block needed when using trusted publishing.
